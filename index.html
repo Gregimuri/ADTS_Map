@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Карта торговых точек</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Стили -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Сайдбар -->
+        <div class="sidebar">
+            <!-- Заголовок -->
+            <div class="header">
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ</h1>
+                <div class="status" id="status">
+                    <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
+                </div>
+            </div>
+            
+            <!-- Статистика -->
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #3498db;">
+                        <i class="fas fa-store"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="total-points">0</div>
+                        <div class="stat-label">Всего точек</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #2ecc71;">
+                        <i class="fas fa-eye"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="shown-points">0</div>
+                        <div class="stat-label">Показано</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Управление -->
+            <div class="controls">
+                <button class="btn btn-primary" onclick="loadData()">
+                    <i class="fas fa-sync-alt"></i> Обновить данные
+                </button>
+                <button class="btn btn-secondary" onclick="clearFilters()">
+                    <i class="fas fa-filter"></i> Сбросить фильтры
+                </button>
+                <button class="btn btn-info" onclick="improveGeocoding()" title="Улучшить точность координат">
+                    <i class="fas fa-map-marker-alt"></i> Уточнить координаты
+                </button>
+            </div>
+            
+            <!-- Фильтры -->
+            <div class="filters">
+                <h3><i class="fas fa-filter"></i> Фильтры</h3>
+                
+                <div class="filter-group">
+                    <label>Проект:</label>
+                    <select id="filter-project" multiple class="filter-select">
+                        <option value="">Все проекты</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Регион:</label>
+                    <select id="filter-region" multiple class="filter-select">
+                        <option value="">Все регионы</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Статус:</label>
+                    <select id="filter-status" multiple class="filter-select">
+                        <option value="">Все статусы</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label>Менеджер:</label>
+                    <select id="filter-manager" multiple class="filter-select">
+                        <option value="">Все менеджеры</option>
+                    </select>
+                </div>
+                
+                <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
+                    <i class="fas fa-check"></i> Применить фильтры
+                </button>
+            </div>
+            
+            <!-- Информация о точке -->
+            <div class="point-info" id="point-info" style="display: none;">
+                <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
+                <div id="point-details"></div>
+            </div>
+        </div>
+        
+        <!-- Карта -->
+        <div class="map-container">
+            <div id="map"></div>
+            
+            <!-- Поиск -->
+            <div class="search-box">
+                <input type="text" id="search" placeholder="Поиск по названию или адресу...">
+                <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
+            </div>
+            
+            <!-- Легенда -->
+            <div class="legend">
+                <h5><i class="fas fa-key"></i> Легенда</h5>
+                <div id="legend"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно -->
+    <div id="modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h3 id="modal-title"></h3>
+            <p id="modal-message"></p>
+            <button class="btn btn-primary" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+
+    <!-- Библиотеки -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    
+    <!-- Конфигурация -->
+    <script src="config.js"></script>
+    
+    <!-- Приложение -->
+    <script src="app.js"></script>
+</body>
+</html>
