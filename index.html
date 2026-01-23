@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек с мгновенной загрузкой</title>
+    <title>Карта торговых точек с региональными координатами</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -97,6 +97,19 @@
             animation: pulse 2s infinite;
         }
         
+        .region-badge {
+            background: rgba(155, 89, 182, 0.2);
+            border-left: 3px solid #9b59b6;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin: 10px 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #ecf0f1;
+        }
+        
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
@@ -132,7 +145,7 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ <span style="font-size: 14px; color: #3498db;">(Мгновенная загрузка)</span></h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ <span style="font-size: 14px; color: #9b59b6;">(Региональные координаты)</span></h1>
                 <div class="status" id="status">
                     <i class="fas fa-sync-alt fa-spin"></i> Инициализация...
                 </div>
@@ -241,21 +254,14 @@
                 <button class="btn btn-info" onclick="improveGeocoding()" title="Улучшить точность координат">
                     <i class="fas fa-map-marker-alt"></i> Уточнить координаты
                 </button>
-                <button class="btn btn-success" onclick="testAutonomousGeocoder()" title="Тест автономного геокодера">
-                    <i class="fas fa-vial"></i> Тест геокодера
+                <button class="btn btn-warning" onclick="showRegionInfo()" title="Информация о регионах">
+                    <i class="fas fa-globe"></i> Регионы
                 </button>
             </div>
             
             <!-- Фильтры -->
             <div class="filters">
                 <h3><i class="fas fa-filter"></i> Фильтры</h3>
-                
-                <div class="filter-group">
-                    <label>Проект:</label>
-                    <select id="filter-project" multiple class="filter-select">
-                        <option value="">Все проекты</option>
-                    </select>
-                </div>
                 
                 <div class="filter-group">
                     <label>Регион:</label>
@@ -284,6 +290,7 @@
                         <option value="">Все</option>
                         <option value="exact">Только точные</option>
                         <option value="approx">Только приблизительные</option>
+                        <option value="regional">Только региональные</option>
                     </select>
                 </div>
                 
@@ -300,11 +307,11 @@
             
             <!-- Информация о геокодере -->
             <div class="geocoder-info" style="background: #2c3e50; margin: 20px; padding: 15px; border-radius: 10px; font-size: 12px; color: #95a5a6;">
-                <h5><i class="fas fa-cogs"></i> Автономный геокодер</h5>
+                <h5><i class="fas fa-cogs"></i> Умный геокодер</h5>
                 <div id="geocoder-stats">
-                    <div><i class="fas fa-bolt" style="color: #2ecc71;"></i> Мгновенная загрузка точек</div>
-                    <div><i class="fas fa-database" style="color: #3498db;"></i> Локальная база + OpenStreetMap</div>
-                    <div><i class="fas fa-sync-alt fa-spin geocoding-active" style="color: #f39c12;"></i> Фоновое улучшение координат</div>
+                    <div><i class="fas fa-bolt" style="color: #2ecc71;"></i> Мгновенная загрузка</div>
+                    <div><i class="fas fa-globe" style="color: #9b59b6;"></i> Использует регионы для точности</div>
+                    <div><i class="fas fa-sync-alt fa-spin geocoding-active" style="color: #f39c12;"></i> Фоновое улучшение</div>
                 </div>
             </div>
         </div>
@@ -315,7 +322,7 @@
             
             <!-- Поиск -->
             <div class="search-box">
-                <input type="text" id="search" placeholder="Поиск по названию или адресу...">
+                <input type="text" id="search" placeholder="Поиск по названию, адресу или региону...">
                 <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
             </div>
             
@@ -324,18 +331,22 @@
                 <h5><i class="fas fa-key"></i> Легенда</h5>
                 <div id="legend">
                     <div style="margin-bottom: 10px;">
-                        <strong style="font-size: 12px; color: #666;">Статус загрузки:</strong>
+                        <strong style="font-size: 12px; color: #666;">Тип координат:</strong>
                         <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
                             <div style="width: 15px; height: 15px; background: #3498db; border-radius: 50%; border: 2px solid white; animation: pulse 2s infinite;"></div>
-                            <span style="font-size: 11px;">Идет поиск координат</span>
+                            <span style="font-size: 11px;">Идет поиск</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
                             <div style="width: 15px; height: 15px; background: #2ecc71; border-radius: 50%; border: 2px solid white;"></div>
-                            <span style="font-size: 11px;">Точные координаты</span>
+                            <span style="font-size: 11px;">Точные</span>
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
                             <div style="width: 15px; height: 15px; background: #f39c12; border-radius: 50%; border: 2px solid white;"></div>
                             <span style="font-size: 11px;">Приблизительные</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+                            <div style="width: 15px; height: 15px; background: #9b59b6; border-radius: 50%; border: 2px solid white;"></div>
+                            <span style="font-size: 11px;">Региональные</span>
                         </div>
                     </div>
                 </div>
@@ -366,55 +377,34 @@
     <script src="app.js"></script>
     
     <script>
-        // Дополнительные функции для обновления UI
-        window.testAutonomousGeocoder = async function() {
-            if (!autonomousGeocoder) {
-                showNotification('Геокодер не инициализирован', 'error');
-                return;
-            }
+        // Функция для отображения информации о регионах
+        window.showRegionInfo = function() {
+            const regionalPoints = allPoints.filter(p => p.regionBased);
+            const totalRegional = regionalPoints.length;
+            const regions = {};
             
-            const testAddresses = [
-                'Москва, Красная площадь',
-                'Алтайский край, Барнаул, ул. Попова, 114/1',
-                'Санкт-Петербург, Невский проспект'
-            ];
-            
-            showModal('Тест геокодера', 'Тестирую автономный геокодер...');
-            
-            let results = [];
-            for (let i = 0; i < testAddresses.length; i++) {
-                const address = testAddresses[i];
-                updateModal('Тест геокодера', `Тестирую: ${address}\n${i+1}/${testAddresses.length}`);
-                
-                try {
-                    const result = await autonomousGeocoder.geocode(address);
-                    results.push({
-                        address: address,
-                        success: !!result,
-                        coordinates: result ? `${result.lat.toFixed(6)}, ${result.lng.toFixed(6)}` : null,
-                        source: result ? result.source : null
-                    });
-                } catch (error) {
-                    results.push({
-                        address: address,
-                        success: false,
-                        error: error.message
-                    });
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-            let message = 'Результаты теста:\n\n';
-            results.forEach(r => {
-                if (r.success) {
-                    message += `✅ ${r.address}\n   ${r.coordinates} (${r.source})\n\n`;
-                } else {
-                    message += `❌ ${r.address}\n   Не найдено\n\n`;
+            regionalPoints.forEach(point => {
+                if (point.region) {
+                    if (!regions[point.region]) {
+                        regions[point.region] = 0;
+                    }
+                    regions[point.region]++;
                 }
             });
             
-            updateModal('Результаты теста', message);
+            let message = `Использование региональных координат:\n\n`;
+            message += `Всего точек с региональными координатами: ${totalRegional}\n\n`;
+            
+            if (Object.keys(regions).length > 0) {
+                message += `Распределение по регионам:\n`;
+                Object.entries(regions).forEach(([region, count]) => {
+                    message += `• ${region}: ${count} точек\n`;
+                });
+            } else {
+                message += `Нет данных о регионах`;
+            }
+            
+            showModal('Информация о регионах', message);
         };
     </script>
 </body>
