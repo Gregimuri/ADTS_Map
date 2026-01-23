@@ -604,4 +604,10 @@ body {
         margin: 10px;
         padding: 10px;
     }
+    
+    .stats-card {
+        grid-template-columns: 1fr 1fr;
+        margin: 10px;
+        padding: 10px;
+    }
 }
