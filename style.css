@@ -611,3 +611,44 @@ body {
         padding: 10px;
     }
 }
+
+
+/* Добавим новые стили для статистики кэша */
+.stats {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+/* Кнопки управления кэшем */
+.cache-controls {
+    display: flex;
+    gap: 10px;
+    margin: 10px 20px;
+    flex-wrap: wrap;
+}
+
+.cache-controls .btn {
+    min-width: auto;
+    flex: none;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+}
+
+/* Адаптивность для кнопок управления кэшем */
+@media (max-width: 768px) {
+    .cache-controls {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 10px;
+        margin: 10px;
+    }
+    
+    .cache-controls .btn {
+        min-width: 70px;
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+}
