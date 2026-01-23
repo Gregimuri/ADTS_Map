@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек с кэшированием координат</title>
+    <title>Карта торговых точек с мгновенной загрузкой</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -97,20 +97,6 @@
             animation: pulse 2s infinite;
         }
         
-        .cache-controls {
-            display: flex;
-            gap: 10px;
-            margin: 10px 20px;
-            flex-wrap: wrap;
-        }
-        
-        .cache-controls .btn {
-            min-width: auto;
-            flex: none;
-            padding: 8px 12px;
-            font-size: 12px;
-        }
-        
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
@@ -146,9 +132,9 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ <span style="font-size: 14px; color: #3498db;">(С кэшированием)</span></h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ <span style="font-size: 14px; color: #3498db;">(Мгновенная загрузка)</span></h1>
                 <div class="status" id="status">
-                    <i class="fas fa-sync-alt fa-spin"></i> Инициализация базы данных...
+                    <i class="fas fa-sync-alt fa-spin"></i> Инициализация...
                 </div>
             </div>
             
@@ -171,16 +157,6 @@
                 </div>
                 
                 <div class="stat-item">
-                    <div class="stat-badge" style="background: #9b59b6;">
-                        <i class="fas fa-database"></i>
-                    </div>
-                    <div class="stat-text">
-                        <div class="stat-value" id="cached-loaded">0</div>
-                        <div class="stat-label">Из кэша</div>
-                    </div>
-                </div>
-                
-                <div class="stat-item">
                     <div class="stat-badge" style="background: #2ecc71;">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -199,22 +175,16 @@
                         <div class="stat-label">Приблизительные</div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Управление кэшем -->
-            <div class="cache-controls">
-                <button class="btn btn-primary" onclick="loadData()" title="Загрузить данные с использованием кэша">
-                    <i class="fas fa-sync-alt"></i> Обновить
-                </button>
-                <button class="btn btn-success" onclick="improveGeocoding()" title="Улучшить координаты и сохранить в кэш">
-                    <i class="fas fa-bullseye"></i> Уточнить
-                </button>
-                <button class="btn btn-info" onclick="exportCache()" title="Экспортировать кэш в CSV">
-                    <i class="fas fa-file-export"></i> Экспорт
-                </button>
-                <button class="btn btn-danger" onclick="clearCache()" title="Очистить кэш координат">
-                    <i class="fas fa-trash-alt"></i> Очистить кэш
-                </button>
+                
+                <div class="stat-item">
+                    <div class="stat-badge" style="background: #95a5a6;">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <div class="stat-text">
+                        <div class="stat-value" id="pending-loaded">0</div>
+                        <div class="stat-label">В обработке</div>
+                    </div>
+                </div>
             </div>
             
             <!-- Основная статистика -->
@@ -226,16 +196,6 @@
                     <div class="stat-info">
                         <div class="stat-value" id="total-points">0</div>
                         <div class="stat-label">Всего точек</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: #9b59b6;">
-                        <i class="fas fa-database"></i>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value" id="cached-points">0</div>
-                        <div class="stat-label">Из кэша</div>
                     </div>
                 </div>
                 
@@ -258,6 +218,32 @@
                         <div class="stat-label">Точные</div>
                     </div>
                 </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #f39c12;">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="approx-points">0</div>
+                        <div class="stat-label">Приблизительные</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Управление -->
+            <div class="controls">
+                <button class="btn btn-primary" onclick="loadData()">
+                    <i class="fas fa-sync-alt"></i> Обновить данные
+                </button>
+                <button class="btn btn-secondary" onclick="clearFilters()">
+                    <i class="fas fa-filter"></i> Сбросить фильтры
+                </button>
+                <button class="btn btn-info" onclick="improveGeocoding()" title="Улучшить точность координат">
+                    <i class="fas fa-map-marker-alt"></i> Уточнить координаты
+                </button>
+                <button class="btn btn-success" onclick="testAutonomousGeocoder()" title="Тест автономного геокодера">
+                    <i class="fas fa-vial"></i> Тест геокодера
+                </button>
             </div>
             
             <!-- Фильтры -->
@@ -298,15 +284,11 @@
                         <option value="">Все</option>
                         <option value="exact">Только точные</option>
                         <option value="approx">Только приблизительные</option>
-                        <option value="cached">Только из кэша</option>
                     </select>
                 </div>
                 
                 <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
                     <i class="fas fa-check"></i> Применить фильтры
-                </button>
-                <button class="btn btn-secondary" onclick="clearFilters()" style="margin-top: 10px;">
-                    <i class="fas fa-times"></i> Сбросить фильтры
                 </button>
             </div>
             
@@ -316,14 +298,13 @@
                 <div id="point-details"></div>
             </div>
             
-            <!-- Информация о системе -->
+            <!-- Информация о геокодере -->
             <div class="geocoder-info" style="background: #2c3e50; margin: 20px; padding: 15px; border-radius: 10px; font-size: 12px; color: #95a5a6;">
-                <h5><i class="fas fa-cogs"></i> Система кэширования координат</h5>
+                <h5><i class="fas fa-cogs"></i> Автономный геокодер</h5>
                 <div id="geocoder-stats">
-                    <div><i class="fas fa-database" style="color: #9b59b6;"></i> Локальная база данных IndexedDB</div>
-                    <div><i class="fas fa-bolt" style="color: #2ecc71;"></i> Мгновенная загрузка из кэша</div>
-                    <div><i class="fas fa-sync-alt fa-spin geocoding-active" style="color: #f39c12;"></i> Фоновое обновление кэша</div>
-                    <div><i class="fas fa-shield-alt" style="color: #3498db;"></i> Данные хранятся 90 дней</div>
+                    <div><i class="fas fa-bolt" style="color: #2ecc71;"></i> Мгновенная загрузка точек</div>
+                    <div><i class="fas fa-database" style="color: #3498db;"></i> Локальная база + OpenStreetMap</div>
+                    <div><i class="fas fa-sync-alt fa-spin geocoding-active" style="color: #f39c12;"></i> Фоновое улучшение координат</div>
                 </div>
             </div>
         </div>
@@ -343,11 +324,7 @@
                 <h5><i class="fas fa-key"></i> Легенда</h5>
                 <div id="legend">
                     <div style="margin-bottom: 10px;">
-                        <strong style="font-size: 12px; color: #666;">Источник координат:</strong>
-                        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                            <div style="width: 15px; height: 15px; background: #9b59b6; border-radius: 50%; border: 2px solid white;"></div>
-                            <span style="font-size: 11px;">Из кэша базы данных</span>
-                        </div>
+                        <strong style="font-size: 12px; color: #666;">Статус загрузки:</strong>
                         <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
                             <div style="width: 15px; height: 15px; background: #3498db; border-radius: 50%; border: 2px solid white; animation: pulse 2s infinite;"></div>
                             <span style="font-size: 11px;">Идет поиск координат</span>
@@ -389,12 +366,56 @@
     <script src="app.js"></script>
     
     <script>
-        // Обновляем статистику каждую секунду
-        setInterval(() => {
-            if (typeof updateLoadingStatsUI === 'function') {
-                updateLoadingStatsUI();
+        // Дополнительные функции для обновления UI
+        window.testAutonomousGeocoder = async function() {
+            if (!autonomousGeocoder) {
+                showNotification('Геокодер не инициализирован', 'error');
+                return;
             }
-        }, 1000);
+            
+            const testAddresses = [
+                'Москва, Красная площадь',
+                'Алтайский край, Барнаул, ул. Попова, 114/1',
+                'Санкт-Петербург, Невский проспект'
+            ];
+            
+            showModal('Тест геокодера', 'Тестирую автономный геокодер...');
+            
+            let results = [];
+            for (let i = 0; i < testAddresses.length; i++) {
+                const address = testAddresses[i];
+                updateModal('Тест геокодера', `Тестирую: ${address}\n${i+1}/${testAddresses.length}`);
+                
+                try {
+                    const result = await autonomousGeocoder.geocode(address);
+                    results.push({
+                        address: address,
+                        success: !!result,
+                        coordinates: result ? `${result.lat.toFixed(6)}, ${result.lng.toFixed(6)}` : null,
+                        source: result ? result.source : null
+                    });
+                } catch (error) {
+                    results.push({
+                        address: address,
+                        success: false,
+                        error: error.message
+                    });
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            let message = 'Результаты теста:\n\n';
+            results.forEach(r => {
+                if (r.success) {
+                    message += `✅ ${r.address}\n   ${r.coordinates} (${r.source})\n\n`;
+                } else {
+                    message += `❌ ${r.address}\n   Не найдено\n\n`;
+                }
+            });
+            
+            updateModal('Результаты теста', message);
+        };
     </script>
 </body>
 </html>
