@@ -5,11 +5,13 @@
 
 class AutonomousGeocoder {
     constructor() {
-        this.cache = new Map();
+        this.cache = {};
         this.localDB = this._initLocalDB();
         this.ai = new AddressAI();
         this.requestDelay = 1000; // Задержка между запросами в мс
         this.timeout = 15000; // Таймаут запросов
+        this.onlineAvailable = true;
+        this.quickCache = new Map();
     }
 
     // Инициализация локальной базы координат
@@ -94,6 +96,13 @@ class AutonomousGeocoder {
     getFromCache(address) {
         const normalized = this.normalizeAddress(address);
         const cacheKey = `geocode_${normalized}`;
+        
+        // Проверяем быстрый кэш
+        if (this.quickCache.has(cacheKey)) {
+            return this.quickCache.get(cacheKey);
+        }
+        
+        // Проверяем localStorage
         const cached = localStorage.getItem(cacheKey);
         
         if (cached) {
@@ -101,6 +110,7 @@ class AutonomousGeocoder {
                 const data = JSON.parse(cached);
                 // Кэш на 90 дней
                 if (Date.now() - data.timestamp < 90 * 24 * 60 * 60 * 1000) {
+                    this.quickCache.set(cacheKey, data.result);
                     return data.result;
                 }
             } catch (e) {
@@ -122,6 +132,10 @@ class AutonomousGeocoder {
         };
         
         try {
+            // Сохраняем в быстрый кэш
+            this.quickCache.set(cacheKey, result);
+            
+            // Сохраняем в localStorage
             localStorage.setItem(cacheKey, JSON.stringify(cacheData));
             
             // Также сохраняем в локальную базу для быстрого доступа
@@ -155,16 +169,77 @@ class AutonomousGeocoder {
         
         // Удаляем половину старых записей
         const toDelete = keys.slice(0, Math.floor(keys.length / 2));
-        toDelete.forEach(key => localStorage.removeItem(key));
+        toDelete.forEach(key => {
+            localStorage.removeItem(key);
+            this.quickCache.delete(key);
+        });
+    }
+
+    // Быстрое геокодирование для мгновенной загрузки
+    async quickGeocode(address, region = '', city = '') {
+        if (!address || address.trim().length < 3) {
+            return null;
+        }
+        
+        const startTime = Date.now();
+        const normalized = this.normalizeAddress(address);
+        
+        // 1. Проверяем быстрый кэш (в памяти)
+        const cacheKey = `geocode_${normalized}`;
+        if (this.quickCache.has(cacheKey)) {
+            console.log(`⚡ Быстрый кэш: ${Date.now() - startTime}ms`);
+            return this.quickCache.get(cacheKey);
+        }
+        
+        // 2. Проверяем localStorage кэш
+        const cached = this.getFromCache(address);
+        if (cached) {
+            this.quickCache.set(cacheKey, cached);
+            console.log(`⚡ localStorage кэш: ${Date.now() - startTime}ms`);
+            return cached;
+        }
+        
+        // 3. Пробуем локальную базу (самый быстрый способ)
+        const localResult = this.geocodeLocal(address);
+        if (localResult) {
+            this.quickCache.set(cacheKey, localResult);
+            this.saveToCache(address, localResult);
+            console.log(`⚡ Локальная база: ${Date.now() - startTime}ms`);
+            return localResult;
+        }
+        
+        // 4. Для быстрой загрузки используем региональные координаты
+        const regionalCoords = this.getRegionalCoordinates(region, city);
+        if (regionalCoords) {
+            const quickResult = {
+                lat: regionalCoords.lat,
+                lng: regionalCoords.lng,
+                address: address,
+                source: 'Quick Regional',
+                precision: 'low',
+                isApproximate: true
+            };
+            
+            this.quickCache.set(cacheKey, quickResult);
+            this.saveToCache(address, quickResult);
+            console.log(`⚡ Региональные координаты: ${Date.now() - startTime}ms`);
+            return quickResult;
+        }
+        
+        return null;
     }
 
     // Геокодирование через Nominatim (OpenStreetMap)
     async geocodeNominatim(address) {
         try {
+            // Задержка для соблюдения лимитов Nominatim
             await this._delay(this.requestDelay);
             
             const encodedAddress = encodeURIComponent(address);
             const url = `https://nominatim.openstreetmap.org/search?q=${encodedAddress}&format=json&addressdetails=1&limit=1`;
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeout);
             
             const response = await fetch(url, {
                 headers: {
@@ -172,8 +247,10 @@ class AutonomousGeocoder {
                     'Accept-Language': 'ru',
                     'Accept': 'application/json'
                 },
-                timeout: this.timeout
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (response.ok) {
                 const data = await response.json();
@@ -200,13 +277,18 @@ class AutonomousGeocoder {
             const encodedAddress = encodeURIComponent(address);
             const url = `https://yandex.ru/maps/213/moscow/?text=${encodedAddress}`;
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+            
             const response = await fetch(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 },
-                timeout: this.timeout
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (response.ok) {
                 const html = await response.text();
@@ -256,13 +338,18 @@ class AutonomousGeocoder {
             const encodedAddress = encodeURIComponent(normalized);
             const url = `https://2gis.ru/search/${encodedAddress}`;
             
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+            
             const response = await fetch(url, {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 },
-                timeout: this.timeout
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
             
             if (response.ok) {
                 const html = await response.text();
@@ -372,24 +459,16 @@ class AutonomousGeocoder {
             return null;
         }
         
-        // 1. Проверяем кэш
-        const cached = this.getFromCache(address);
-        if (cached) {
-            return cached;
+        // 1. Быстрое геокодирование для мгновенного отображения
+        const quickResult = await this.quickGeocode(address, region, city);
+        if (quickResult) {
+            return quickResult;
         }
         
-        // 2. Анализируем адрес с помощью ИИ
+        // 2. Если адрес хороший, пробуем онлайн-геокодирование
         const aiResult = this.ai.predict(address);
         
-        // 3. Пробуем локальную базу
-        let result = this.geocodeLocal(address);
-        if (result) {
-            this.saveToCache(address, result);
-            return result;
-        }
-        
-        // 4. Если адрес хороший, пробуем онлайн-геокодирование
-        if (aiResult.score > 0.4) {
+        if (aiResult.score > 0.4 && this.onlineAvailable) {
             const sources = [
                 this.geocodeNominatim.bind(this),
                 this.geocodeYandex.bind(this),
@@ -398,7 +477,7 @@ class AutonomousGeocoder {
             
             for (const source of sources) {
                 try {
-                    result = await source(address);
+                    const result = await source(address);
                     if (result) {
                         this.saveToCache(address, result);
                         return result;
@@ -410,10 +489,10 @@ class AutonomousGeocoder {
             }
         }
         
-        // 5. Если ничего не нашли, возвращаем региональные координаты
+        // 3. Если ничего не нашли, возвращаем случайные координаты по региону
         const regionalCoords = this.getRegionalCoordinates(region, city);
         if (regionalCoords) {
-            result = {
+            const result = {
                 lat: regionalCoords.lat,
                 lng: regionalCoords.lng,
                 address: address,
@@ -421,6 +500,7 @@ class AutonomousGeocoder {
                 precision: 'low',
                 isApproximate: true
             };
+            
             this.saveToCache(address, result);
             return result;
         }
