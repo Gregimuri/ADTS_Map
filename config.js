@@ -6,12 +6,12 @@ const CONFIG = {
     // Оставьте ПУСТЫМ - используем автономный геокодер
     API_KEY: '',
     
-    // Названия столбцов
+    // Названия столбцов (приоритет: регион для геокодирования)
     COLUMN_NAMES: {
         name: ['Название ТТ', 'Название', 'Магазин', 'Точка'],
-        region: ['Регион', 'Область', 'Город'],
-        city: ['Город', 'Населенный пункт'],
-        address: ['Адрес', 'Местоположение', 'Адрес ТТ'],
+        region: ['Регион', 'Область', 'Город', 'Местоположение'],
+        city: ['Город', 'Населенный пункт', 'Город/Населенный пункт'],
+        address: ['Адрес', 'Адрес ТТ', 'Местоположение', 'Адрес магазина'],
         status: ['Статус ТТ', 'Статус', 'Состояние'],
         manager: ['Менеджер ФИО', 'Менеджер', 'Ответственный'],
         contractor: ['Подрядчик ФИО', 'Подрядчик', 'Исполнитель'],
@@ -31,7 +31,7 @@ const CONFIG = {
         'Закрыт': '#e74c3c',
         'План': '#3498db',           // синий
         'Плановая': '#3498db',
-        'В работе': '#9b59b6',       // фиолетовый
+        'В работе': '#9b59b6',       // фиолетовый (региональные)
         'default': '#95a5a6'         // серый
     },
     
@@ -40,20 +40,23 @@ const CONFIG = {
         'high': '#2ecc71',      // высокая - зеленый
         'medium': '#3498db',    // средняя - синий
         'low': '#f39c12',       // низкая - оранжевый
+        'regional': '#9b59b6',  // региональные - фиолетовый
         'very low': '#e74c3c',  // очень низкая - красный
         'unknown': '#95a5a6'    // неизвестно - серый
     },
     
-    // Настройки автономного геокодера
+    // Настройки автономного геокодера с региональной привязкой
     GEOCODER: {
         enabled: true,
-        sources: ['local', 'nominatim', 'yandex', '2gis'],
+        useRegionForGeocoding: true, // Использовать регион для геокодирования
+        regionalFallback: true,      // Использовать регион как запасной вариант
+        sources: ['regional', 'local', 'nominatim', 'yandex', '2gis'],
         cacheDuration: 90, // дней
         requestDelay: 1000, // мс
         timeout: 15000, // мс
-        maxBatchSize: 10,
+        maxBatchSize: 3,
         backgroundImprovement: true,
-        improvementDelay: 2000 // мс
+        improvementDelay: 1200 // мс
     },
     
     // Настройки карты
@@ -79,7 +82,8 @@ const CONFIG = {
         showPrecisionFilter: true,
         defaultPrecision: 'all',
         rememberFilters: true,
-        filterLifetime: 7 // дней
+        filterLifetime: 7, // дней
+        regionPriority: true // Приоритет региона в фильтрах
     },
     
     // Настройки отображения
@@ -89,6 +93,14 @@ const CONFIG = {
         showLegend: true,
         clusterMarkers: true,
         clusterRadius: 40,
-        markerAnimation: true
+        markerAnimation: true,
+        showRegionInfo: true // Показывать информацию о регионах
+    },
+    
+    // Региональные настройки
+    REGIONS: {
+        priority: ['Москва', 'Московская область', 'Санкт-Петербург', 'Алтайский край'],
+        defaultRadius: 1.0, // Радиус в градусах для регионов
+        accuracyMultiplier: 0.8 // Множитель точности при использовании региона
     }
 };
