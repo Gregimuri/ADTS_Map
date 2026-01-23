@@ -35,13 +35,23 @@ const CONFIG = {
         'default': '#95a5a6'         // серый
     },
     
-    // Цвета для точности координат
-    PRECISION_COLORS: {
-        'high': '#2ecc71',      // высокая - зеленый
-        'medium': '#3498db',    // средняя - синий
-        'low': '#f39c12',       // низкая - оранжевый
-        'very low': '#e74c3c',  // очень низкая - красный
-        'unknown': '#95a5a6'    // неизвестно - серый
+    // Цвета для источников координат
+    SOURCE_COLORS: {
+        'cache': '#9b59b6',      // из кэша - фиолетовый
+        'high': '#2ecc71',       // высокая точность - зеленый
+        'medium': '#3498db',     // средняя точность - синий
+        'low': '#f39c12',        // низкая точность - оранжевый
+        'very low': '#e74c3c',   // очень низкая - красный
+        'temporary': '#95a5a6'   // временная - серый
+    },
+    
+    // Настройки базы данных
+    DATABASE: {
+        name: 'GeoCacheDB',
+        version: 1,
+        storeName: 'coordinates',
+        cacheDuration: 30, // дней хранения кэша
+        cleanupInterval: 7 // дней между очистками
     },
     
     // Настройки автономного геокодера
@@ -51,9 +61,9 @@ const CONFIG = {
         cacheDuration: 90, // дней
         requestDelay: 1000, // мс
         timeout: 15000, // мс
-        maxBatchSize: 10,
+        maxBatchSize: 3,
         backgroundImprovement: true,
-        improvementDelay: 2000 // мс
+        improvementDelay: 1000 // мс
     },
     
     // Настройки карты
@@ -84,6 +94,8 @@ const CONFIG = {
     
     // Настройки отображения
     DISPLAY: {
+        showCacheControls: true,
+        showCacheStats: true,
         showGeocoderInfo: true,
         showStats: true,
         showLegend: true,
