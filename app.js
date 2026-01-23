@@ -16,207 +16,14 @@ let pointsQueue = [];
 let processedPointsCount = 0;
 let displayedPointsCount = 0;
 let isGeocodingActive = false;
-let db;
-const DB_NAME = 'GeoCacheDB';
-const DB_VERSION = 1;
-const STORE_NAME = 'coordinates';
 
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ==========
-document.addEventListener('DOMContentLoaded', async function() {
-    await initDatabase();
+document.addEventListener('DOMContentLoaded', function() {
     initMap();
     initAutonomousGeocoder();
-    await loadData();
+    loadData();
     setupAutoUpdate();
 });
-
-// ========== ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ ==========
-async function initDatabase() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        
-        request.onerror = function(event) {
-            console.error('Ошибка открытия базы данных:', event.target.error);
-            // Создаем заглушку если IndexedDB недоступен
-            db = null;
-            resolve();
-        };
-        
-        request.onsuccess = function(event) {
-            db = event.target.result;
-            console.log('✅ База данных IndexedDB инициализирована');
-            resolve();
-        };
-        
-        request.onupgradeneeded = function(event) {
-            const database = event.target.result;
-            
-            // Создаем хранилище для координат
-            if (!database.objectStoreNames.contains(STORE_NAME)) {
-                const store = database.createObjectStore(STORE_NAME, { keyPath: 'addressHash' });
-                store.createIndex('timestamp', 'timestamp', { unique: false });
-                store.createIndex('region', 'region', { unique: false });
-                console.log('🛠️ Создано хранилище координат');
-            }
-        };
-    });
-}
-
-// ========== СОХРАНЕНИЕ КООРДИНАТ В БАЗУ ==========
-async function saveCoordinatesToDB(point) {
-    if (!db || !point.address) return;
-    
-    try {
-        const addressHash = hashString(point.address + (point.region || ''));
-        const coordinateData = {
-            addressHash: addressHash,
-            address: point.address,
-            region: point.region || '',
-            lat: point.lat,
-            lng: point.lng,
-            source: point.source || 'unknown',
-            precision: point.precision || 'unknown',
-            isMock: point.isMock || false,
-            timestamp: Date.now(),
-            updatedAt: Date.now()
-        };
-        
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        
-        store.put(coordinateData);
-        
-        return true;
-    } catch (error) {
-        console.warn('Ошибка сохранения в базу данных:', error);
-        return false;
-    }
-}
-
-// ========== ПОИСК КООРДИНАТ В БАЗЕ ==========
-async function getCoordinatesFromDB(address, region = '') {
-    if (!db || !address) return null;
-    
-    return new Promise((resolve, reject) => {
-        try {
-            const addressHash = hashString(address + region);
-            const transaction = db.transaction([STORE_NAME], 'readonly');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.get(addressHash);
-            
-            request.onsuccess = function(event) {
-                const result = event.target.result;
-                
-                if (result) {
-                    // Проверяем актуальность (кэш на 30 дней)
-                    const isExpired = Date.now() - result.timestamp > 30 * 24 * 60 * 60 * 1000;
-                    
-                    if (!isExpired) {
-                        console.log('📦 Координаты найдены в базе данных');
-                        resolve({
-                            lat: result.lat,
-                            lng: result.lng,
-                            address: result.address,
-                            source: result.source + ' (cached)',
-                            precision: result.precision,
-                            isApproximate: result.isMock,
-                            fromCache: true
-                        });
-                    } else {
-                        // Устаревшие данные
-                        resolve(null);
-                    }
-                } else {
-                    resolve(null);
-                }
-            };
-            
-            request.onerror = function(event) {
-                console.warn('Ошибка чтения из базы данных:', event.target.error);
-                resolve(null);
-            };
-        } catch (error) {
-            console.warn('Ошибка доступа к базе данных:', error);
-            resolve(null);
-        }
-    });
-}
-
-// ========== ПАКЕТНАЯ ЗАГРУЗКА ИЗ БАЗЫ ==========
-async function batchLoadFromDB(points) {
-    if (!db) return points;
-    
-    console.log('🔍 Ищу координаты в базе данных...');
-    
-    const promises = points.map(async (point) => {
-        if (point.address) {
-            const cached = await getCoordinatesFromDB(point.address, point.region);
-            if (cached) {
-                point.lat = cached.lat;
-                point.lng = cached.lng;
-                point.coordinates = `${cached.lat},${cached.lng}`;
-                point.source = cached.source;
-                point.precision = cached.precision;
-                point.isMock = cached.isApproximate;
-                point.geocoded = true;
-                point.fromCache = true;
-                point.processed = true;
-                processedPointsCount++;
-            }
-        }
-        return point;
-    });
-    
-    const results = await Promise.all(promises);
-    const cachedCount = results.filter(p => p.fromCache).length;
-    
-    console.log(`✅ Загружено из кэша: ${cachedCount} из ${points.length} точек`);
-    
-    return results;
-}
-
-// ========== ОЧИСТКА СТАРЫХ ДАННЫХ ==========
-async function cleanupOldCache() {
-    if (!db) return;
-    
-    try {
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const index = store.index('timestamp');
-        const cutoffDate = Date.now() - 90 * 24 * 60 * 60 * 1000; // 90 дней
-        
-        const request = index.openCursor();
-        let deletedCount = 0;
-        
-        request.onsuccess = function(event) {
-            const cursor = event.target.result;
-            if (cursor) {
-                if (cursor.value.timestamp < cutoffDate) {
-                    cursor.delete();
-                    deletedCount++;
-                }
-                cursor.continue();
-            } else {
-                if (deletedCount > 0) {
-                    console.log(`🧹 Очищено ${deletedCount} устаревших записей из кэша`);
-                }
-            }
-        };
-    } catch (error) {
-        console.warn('Ошибка очистки кэша:', error);
-    }
-}
-
-// ========== ХЭШ-ФУНКЦИЯ ==========
-function hashString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // Преобразуем в 32-битное целое
-    }
-    return Math.abs(hash).toString(16);
-}
 
 // ========== ИНИЦИАЛИЗАЦИЯ АВТОНОМНОГО ГЕОКОДЕРА ==========
 function initAutonomousGeocoder() {
@@ -261,7 +68,7 @@ function initMap() {
     }).addTo(map);
 }
 
-// ========== ЗАГРУЗКА ДАННЫХ С ИСПОЛЬЗОВАНИЕМ КЭША ==========
+// ========== ЗАГРУЗКА ДАННЫХ С ПОЭТАПНЫМ ОТОБРАЖЕНИЕМ ==========
 async function loadData() {
     try {
         updateStatus('<i class="fas fa-sync-alt fa-spin"></i> Загрузка данных...');
@@ -278,16 +85,13 @@ async function loadData() {
         const rawPoints = processData(data);
         console.log(`📊 Загружено ${rawPoints.length} точек`);
         
-        // 3. Пробуем загрузить из кэша
-        const pointsWithCache = await batchLoadFromDB(rawPoints);
+        // 3. Сразу показываем все точки с временными координатами
+        showPointsImmediately(rawPoints);
         
-        // 4. Сразу показываем все точки
-        showPointsImmediately(pointsWithCache);
+        // 4. Запускаем фоновое геокодирование с постепенным обновлением
+        startProgressiveGeocoding(rawPoints);
         
-        // 5. Запускаем фоновое геокодирование для недостающих точек
-        startProgressiveGeocoding(pointsWithCache);
-        
-        showNotification('Точки загружены с использованием кэша', 'info');
+        showNotification('Точки загружены, ищу точные координаты...', 'info');
         
     } catch (error) {
         console.error('Ошибка загрузки:', error);
@@ -299,7 +103,7 @@ async function loadData() {
     }
 }
 
-// ========== ПОСТЕПЕННОЕ ГЕОКОДИРОВАНИЕ С КЭШИРОВАНИЕМ ==========
+// ========== ПОСТЕПЕННОЕ ГЕОКОДИРОВАНИЕ ==========
 async function startProgressiveGeocoding(points) {
     if (isGeocodingActive) {
         console.log('Геокодирование уже запущено');
@@ -307,46 +111,31 @@ async function startProgressiveGeocoding(points) {
     }
     
     isGeocodingActive = true;
-    
-    // Находим точки без координат
-    const pointsWithoutCoords = points.filter(p => !p.geocoded && !p.processed);
-    
-    if (pointsWithoutCoords.length === 0) {
-        console.log('✅ Все координаты уже загружены из кэша');
-        updateStatus(`<i class="fas fa-check-circle" style="color: #2ecc71;"></i> Все ${points.length} точек из кэша`);
-        showLoadingStats(false);
-        isGeocodingActive = false;
-        return;
-    }
-    
-    console.log(`🔄 Начинаю геокодирование для ${pointsWithoutCoords.length} точек`);
+    console.log(`🔄 Начинаю постепенное геокодирование для ${points.length} точек`);
     
     allPoints = points;
-    processedPointsCount = points.filter(p => p.processed).length;
-    displayedPointsCount = points.filter(p => p.displayed).length;
+    processedPointsCount = 0;
+    displayedPointsCount = 0;
     
-    // Создаем очередь для обработки
-    pointsQueue = [...pointsWithoutCoords];
+    // Создаем копию для обработки
+    pointsQueue = [...points];
     
     // Запускаем обработку порциями
     processGeocodingBatch();
 }
 
-// ========== ОБРАБОТКА ПАКЕТА ТОЧЕК С СОХРАНЕНИЕМ В БАЗУ ==========
+// ========== ОБРАБОТКА ПАКЕТА ТОЧЕК ==========
 async function processGeocodingBatch() {
     if (pointsQueue.length === 0) {
         // Все точки обработаны
         isGeocodingActive = false;
         updateStatus(`<i class="fas fa-check-circle" style="color: #2ecc71;"></i> Готово! ${processedPointsCount} точек`);
-        showNotification(`Все координаты обработаны (${processedPointsCount} точек)`, 'success');
+        showNotification(`Все координаты найдены (${processedPointsCount} точек)`, 'success');
         
         // Обновляем фильтры и легенду
         updateFilters();
         updateLegend();
         showLoadingStats(false);
-        
-        // Очищаем старый кэш
-        cleanupOldCache();
         
         return;
     }
@@ -373,7 +162,6 @@ async function processGeocodingBatch() {
                 point.isMock = result.isApproximate || false;
                 point.geocoded = true;
                 point.processed = true;
-                point.fromCache = false;
                 
                 if (result.isApproximate) {
                     point.precision = 'low';
@@ -382,9 +170,6 @@ async function processGeocodingBatch() {
                     point.precision = result.precision || 'medium';
                 }
                 
-                // Сохраняем в базу данных
-                await saveCoordinatesToDB(point);
-                
                 // Обновляем маркер на карте
                 updatePointOnMap(point);
                 
@@ -392,14 +177,13 @@ async function processGeocodingBatch() {
                 processedPointsCount++;
                 displayedPointsCount++;
                 
-                console.log(`✅ Геокодировано и сохранено: ${point.name}`);
+                console.log(`✅ Геокодировано: ${point.name}`);
                 
             } else {
                 // Если не нашли, отмечаем как необработанную
                 point.geocoded = false;
                 point.processed = true;
                 point.precision = 'very low';
-                point.fromCache = false;
                 processedPointsCount++;
                 console.log(`❌ Не найдено: ${point.name}`);
             }
@@ -410,7 +194,6 @@ async function processGeocodingBatch() {
             point.processed = true;
             point.geocoded = false;
             point.precision = 'error';
-            point.fromCache = false;
             processedPointsCount++;
             return point;
         }
@@ -430,7 +213,7 @@ async function processGeocodingBatch() {
     setTimeout(processGeocodingBatch, 500);
 }
 
-// ========== НЕМЕДЛЕННОЕ ОТОБРАЖЕНИЕ ТОЧЕК С УЧЕТОМ КЭША ==========
+// ========== НЕМЕДЛЕННОЕ ОТОБРАЖЕНИЕ ТОЧЕК ==========
 function showPointsImmediately(points) {
     console.log(`🎯 Немедленно показываю ${points.length} точек`);
     
@@ -438,23 +221,8 @@ function showPointsImmediately(points) {
     markerCluster.clearLayers();
     displayedPointsCount = 0;
     
-    // Разделяем точки на кэшированные и некэшированные
-    const cachedPoints = points.filter(p => p.fromCache && p.lat && p.lng);
-    const nonCachedPoints = points.filter(p => !p.fromCache || !p.lat || !p.lng);
-    
-    console.log(`📊 Кэшировано: ${cachedPoints.length}, нужно геокодировать: ${nonCachedPoints.length}`);
-    
-    // Показываем кэшированные точки
-    cachedPoints.forEach(point => {
-        const marker = createMarker(point);
-        markerCluster.addLayer(marker);
-        displayedPointsCount++;
-        point.displayed = true;
-        point.cachedMarker = marker;
-    });
-    
-    // Показываем некэшированные точки с временными координатами
-    nonCachedPoints.forEach(point => {
+    // Создаем временные маркеры без координат
+    points.forEach((point, index) => {
         // Создаем временную точку с координатами по региону
         const tempPoint = {
             ...point,
@@ -474,7 +242,6 @@ function showPointsImmediately(points) {
         point.displayed = true;
         point.tempLat = tempPoint.lat;
         point.tempLng = tempPoint.lng;
-        point.isTemporary = true;
     });
     
     // Центрируем карту
@@ -486,7 +253,7 @@ function showPointsImmediately(points) {
     updateLegend();
     updateLoadingStatsUI();
     
-    console.log(`✅ Показано ${displayedPointsCount} точек (${cachedPoints.length} из кэша)`);
+    console.log(`✅ Показано ${displayedPointsCount} временных точек`);
 }
 
 // ========== ОБНОВЛЕНИЕ ТОЧКИ НА КАРТЕ ==========
@@ -495,13 +262,6 @@ function updatePointOnMap(point) {
     if (point.tempMarker) {
         markerCluster.removeLayer(point.tempMarker);
         point.tempMarker = null;
-        point.isTemporary = false;
-    }
-    
-    // Удаляем старый кэшированный маркер если есть
-    if (point.cachedMarker) {
-        markerCluster.removeLayer(point.cachedMarker);
-        point.cachedMarker = null;
     }
     
     // Добавляем новый маркер с реальными координатами
@@ -561,17 +321,12 @@ function createMarker(point) {
         color = CONFIG.STATUS_COLORS['План'] || '#3498db';
     }
     
-    // Определяем иконку в зависимости от источника
+    // Определяем иконку в зависимости от точности
     let markerIcon = '📌';
     let badgeColor = '';
     let opacity = 1;
-    let badgeIcon = '';
     
-    if (point.fromCache) {
-        markerIcon = '💾';
-        badgeColor = '#9b59b6';
-        badgeIcon = '💾';
-    } else if (point.isTemporary) {
+    if (point.isTemporary) {
         markerIcon = '⏳';
         badgeColor = '#95a5a6';
         opacity = 0.7;
@@ -624,11 +379,7 @@ function createMarker(point) {
                         background: ${badgeColor};
                         border-radius: 50%;
                         border: 2px solid white;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        font-size: 8px;
-                    ">${badgeIcon || ''}</div>
+                    "></div>
                 ` : ''}
             </div>
         `,
@@ -642,8 +393,7 @@ function createMarker(point) {
         title: point.name,
         status: point.status,
         precision: point.precision || 'unknown',
-        isTemporary: point.isTemporary || false,
-        fromCache: point.fromCache || false
+        isTemporary: point.isTemporary || false
     });
     
     // Всплывающее окно
@@ -667,11 +417,7 @@ function createPopupContent(point) {
     let precisionText = 'Высокая';
     let precisionColor = '#2ecc71';
     
-    if (point.fromCache) {
-        precisionIcon = '💾';
-        precisionText = 'Из кэша';
-        precisionColor = '#9b59b6';
-    } else if (point.isTemporary) {
+    if (point.isTemporary) {
         precisionIcon = '⏳';
         precisionText = 'Идет поиск координат...';
         precisionColor = '#95a5a6';
@@ -744,11 +490,7 @@ function createPopupContent(point) {
                 ` : ''}
             </div>
             
-            ${point.fromCache ? `
-                <div style="margin-top: 10px; padding: 8px; background: #9b59b6; color: white; border-radius: 4px; font-size: 11px;">
-                    <i class="fas fa-database"></i> Загружено из кэша базы данных
-                </div>
-            ` : point.isTemporary ? `
+            ${point.isTemporary ? `
                 <div style="margin-top: 10px; padding: 8px; background: #3498db; color: white; border-radius: 4px; font-size: 11px;">
                     <i class="fas fa-sync-alt fa-spin"></i> Идет поиск точных координат...
                 </div>
@@ -768,7 +510,6 @@ function updateStatistics() {
     const displayedPoints = allPoints.filter(p => p.displayed).length;
     const processedPoints = allPoints.filter(p => p.processed).length;
     const geocodedPoints = allPoints.filter(p => p.geocoded).length;
-    const cachedPoints = allPoints.filter(p => p.fromCache).length;
     const mockPoints = allPoints.filter(p => p.isMock && !p.isTemporary).length;
     const exactPoints = geocodedPoints - mockPoints;
     
@@ -778,18 +519,15 @@ function updateStatistics() {
     // Обновляем дополнительные счетчики если они есть
     const exactPointsEl = document.getElementById('exact-points');
     const approxPointsEl = document.getElementById('approx-points');
-    const cachedPointsEl = document.getElementById('cached-points');
     
     if (exactPointsEl) exactPointsEl.textContent = exactPoints;
     if (approxPointsEl) approxPointsEl.textContent = mockPoints;
-    if (cachedPointsEl) cachedPointsEl.textContent = cachedPoints;
 }
 
 // ========== ОБНОВЛЕНИЕ СТАТИСТИКИ ЗАГРУЗКИ ==========
 function updateLoadingStatsUI() {
     const total = allPoints.length;
     const processed = allPoints.filter(p => p.processed).length;
-    const cached = allPoints.filter(p => p.fromCache).length;
     const exact = allPoints.filter(p => p.geocoded && !p.isMock && !p.isTemporary).length;
     const approx = allPoints.filter(p => p.isMock && !p.isTemporary).length;
     const pending = total - processed;
@@ -799,13 +537,11 @@ function updateLoadingStatsUI() {
     const exactEl = document.getElementById('exact-loaded');
     const approxEl = document.getElementById('approx-loaded');
     const pendingEl = document.getElementById('pending-loaded');
-    const cachedEl = document.getElementById('cached-loaded');
     
     if (totalEl) totalEl.textContent = total;
     if (exactEl) exactEl.textContent = exact;
     if (approxEl) approxEl.textContent = approx;
     if (pendingEl) pendingEl.textContent = pending;
-    if (cachedEl) cachedEl.textContent = cached;
     
     // Обновляем прогресс бар
     updateProgressBar(processed, total);
@@ -837,7 +573,7 @@ function showLoadingStats(show) {
     }
 }
 
-// ========== ФИЛЬТРАЦИЯ ==========
+// ========== ОБНОВЛЕННЫЕ ФУНКЦИИ ФИЛЬТРАЦИИ ==========
 function applyFilters() {
     // Получаем выбранные значения
     activeFilters.projects = getSelectedValues('filter-project');
@@ -863,9 +599,11 @@ function clearFilters() {
         const select = document.getElementById(id);
         if (select) {
             if (select.multiple) {
+                // Для multiple select
                 Array.from(select.options).forEach(option => option.selected = false);
                 if (select.options.length > 0) select.options[0].selected = true;
             } else {
+                // Для single select
                 select.selectedIndex = 0;
             }
         }
@@ -934,8 +672,6 @@ function filterPoints() {
                 return false;
             } else if (activeFilters.precision === 'approx' && !point.isMock && !point.isTemporary) {
                 return false;
-            } else if (activeFilters.precision === 'cached' && !point.fromCache) {
-                return false;
             }
         }
         
@@ -995,7 +731,7 @@ function updatePointsDisplayWithSearch(results) {
     }
 }
 
-// ========== ФУНКЦИЯ УЛУЧШЕНИЯ КООРДИНАТ С СОХРАНЕНИЕМ ==========
+// ========== ФУНКЦИЯ УЛУЧШЕНИЯ КООРДИНАТ ==========
 async function improveGeocoding() {
     const pointsToImprove = allPoints.filter(p => 
         p.needsImprovement && p.address && !p.isImproving && p.processed
@@ -1008,7 +744,7 @@ async function improveGeocoding() {
     
     showModal('Автономное уточнение координат', 
         `Найдено ${pointsToImprove.length} точек для уточнения.\n` +
-        `Уточняю координаты и сохраняю в базу данных...`);
+        `Уточняю координаты в фоновом режиме...`);
     
     let improvedCount = 0;
     
@@ -1034,11 +770,7 @@ async function improveGeocoding() {
                 point.isMock = false;
                 point.precision = result.precision || 'high';
                 point.needsImprovement = false;
-                point.fromCache = false;
                 improvedCount++;
-                
-                // Сохраняем в базу данных
-                await saveCoordinatesToDB(point);
                 
                 // Обновляем маркер на карте
                 updatePointOnMap(point);
@@ -1059,107 +791,10 @@ async function improveGeocoding() {
     updateLoadingStatsUI();
     
     if (improvedCount > 0) {
-        showNotification(`Уточнены и сохранены координаты для ${improvedCount} точек`, 'success');
+        showNotification(`Уточнены координаты для ${improvedCount} точек`, 'success');
     } else {
         showNotification('Не удалось улучшить координаты. Попробуйте позже.', 'info');
     }
-}
-
-// ========== УПРАВЛЕНИЕ БАЗОЙ ДАННЫХ ==========
-async function clearCache() {
-    if (!db) {
-        showNotification('База данных не доступна', 'error');
-        return;
-    }
-    
-    if (!confirm('Вы уверены, что хотите очистить кэш координат? Это не удалит сами точки, только сохраненные координаты.')) {
-        return;
-    }
-    
-    try {
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.clear();
-        
-        request.onsuccess = function() {
-            showNotification('Кэш координат успешно очищен', 'success');
-            console.log('🧹 Кэш координат очищен');
-            
-            // Обновляем точки
-            allPoints.forEach(point => {
-                point.fromCache = false;
-                if (point.geocoded && !point.isTemporary) {
-                    // Перезагружаем координаты через геокодер
-                    point.geocoded = false;
-                    point.processed = false;
-                }
-            });
-            
-            // Перезапускаем геокодирование
-            startProgressiveGeocoding(allPoints);
-        };
-        
-        request.onerror = function(event) {
-            console.error('Ошибка очистки кэша:', event.target.error);
-            showNotification('Ошибка очистки кэша', 'error');
-        };
-    } catch (error) {
-        console.error('Ошибка очистки кэша:', error);
-        showNotification('Ошибка очистки кэша', 'error');
-    }
-}
-
-async function exportCache() {
-    if (!db) {
-        showNotification('База данных не доступна', 'error');
-        return;
-    }
-    
-    try {
-        const transaction = db.transaction([STORE_NAME], 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-        const request = store.getAll();
-        
-        request.onsuccess = async function(event) {
-            const data = event.target.result;
-            
-            if (data.length === 0) {
-                showNotification('Кэш пуст', 'info');
-                return;
-            }
-            
-            // Преобразуем в CSV
-            const csvContent = convertCacheToCSV(data);
-            
-            // Создаем файл для скачивания
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            const url = URL.createObjectURL(blob);
-            link.setAttribute('href', url);
-            link.setAttribute('download', `geocache_${new Date().toISOString().slice(0,10)}.csv`);
-            link.click();
-            
-            showNotification(`Экспортировано ${data.length} записей из кэша`, 'success');
-        };
-    } catch (error) {
-        console.error('Ошибка экспорта кэша:', error);
-        showNotification('Ошибка экспорта кэша', 'error');
-    }
-}
-
-function convertCacheToCSV(data) {
-    const headers = ['Адрес', 'Регион', 'Широта', 'Долгота', 'Источник', 'Точность', 'Дата сохранения'];
-    const rows = data.map(item => [
-        `"${item.address || ''}"`,
-        `"${item.region || ''}"`,
-        item.lat || '',
-        item.lng || '',
-        `"${item.source || ''}"`,
-        `"${item.precision || ''}"`,
-        new Date(item.timestamp).toLocaleString()
-    ]);
-    
-    return [headers.join(','), ...rows].join('\n');
 }
 
 // ========== ИНФОРМАЦИЯ О ТОЧКЕ ==========
@@ -1182,11 +817,7 @@ function showPointDetails(point) {
     let precisionText = 'Высокая';
     let precisionColor = '#2ecc71';
     
-    if (point.fromCache) {
-        precisionIcon = '💾';
-        precisionText = 'Из кэша';
-        precisionColor = '#9b59b6';
-    } else if (point.isTemporary) {
+    if (point.isTemporary) {
         precisionIcon = '⏳';
         precisionText = 'Идет поиск координат';
         precisionColor = '#95a5a6';
@@ -1241,18 +872,14 @@ function showPointDetails(point) {
             ` : ''}
         </div>
         
-        ${point.fromCache ? `
-            <div style="margin-top: 15px; padding: 8px; background: #9b59b6; color: white; border-radius: 6px; font-size: 12px;">
-                <i class="fas fa-database"></i> Загружено из кэша базы данных
-            </div>
-        ` : point.isTemporary ? `
+        ${point.isTemporary ? `
             <div style="margin-top: 15px; padding: 8px; background: #3498db; color: white; border-radius: 6px; font-size: 12px;">
                 <i class="fas fa-sync-alt fa-spin"></i> Идет поиск точных координат...
             </div>
         ` : point.isMock ? `
             <div style="margin-top: 15px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px;">
                 <i class="fas fa-map-marker-alt"></i> Приблизительные координаты
-                <br><small>Нажмите "Уточнить координаты" для улучшения</small>
+                ${point.needsImprovement ? '<br><small>Нажмите "Уточнить координаты" для улучшения</small>' : ''}
             </div>
         ` : ''}
     `;
@@ -1293,8 +920,8 @@ function getRandomCoordinate(type, region) {
         }
     }
     
-    // Добавляем случайное смещение
-    const offset = 0.5;
+    // Добавляем случайное смещение (меньше для временных точек)
+    const offset = 0.5; // Уменьшили для лучшего визуального восприятия
     if (type === 'lat') {
         return baseLat + (Math.random() - 0.5) * offset;
     } else {
@@ -1368,21 +995,17 @@ function updateLegend() {
     
     let legendHTML = `
         <div style="margin-bottom: 15px;">
-            <strong style="font-size: 12px; color: #666;">Источник координат:</strong>
+            <strong style="font-size: 12px; color: #666;">Статус загрузки:</strong>
             <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                <div style="width: 15px; height: 15px; background: #9b59b6; border-radius: 50%; border: 2px solid white;"></div>
-                <span style="font-size: 11px;">Из кэша базы данных</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                <div style="width: 15px; height: 15px; background: #3498db; border-radius: 50%; border: 2px solid white; animation: pulse 2s infinite;"></div>
+                <div style="width: 15px; height: 15px; border-radius: 50%; background: #3498db; border: 2px solid white; animation: pulse 2s infinite;"></div>
                 <span style="font-size: 11px;">Идет поиск координат</span>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                <div style="width: 15px; height: 15px; background: #2ecc71; border-radius: 50%; border: 2px solid white;"></div>
+                <div style="width: 15px; height: 15px; border-radius: 50%; background: #2ecc71; border: 2px solid white;"></div>
                 <span style="font-size: 11px;">Точные координаты</span>
             </div>
             <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                <div style="width: 15px; height: 15px; background: #f39c12; border-radius: 50%; border: 2px solid white;"></div>
+                <div style="width: 15px; height: 15px; border-radius: 50%; background: #f39c12; border: 2px solid white;"></div>
                 <span style="font-size: 11px;">Приблизительные</span>
             </div>
         </div>
@@ -1514,7 +1137,8 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-// ========== АЛЬТЕРНАТИВНАЯ ЗАГРУЗКА ==========
+// ========== ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) ==========
+
 async function tryAlternativeLoad() {
     try {
         updateStatus('Пробуем альтернативный способ...');
@@ -1552,20 +1176,15 @@ async function tryAlternativeLoad() {
             }
         }
         
-        // Обрабатываем данные
-        const rawPoints = processDataFromObjects(points);
-        
-        // Пробуем загрузить из кэша
-        const pointsWithCache = await batchLoadFromDB(rawPoints);
-        
         // Сразу показываем точки
-        showPointsImmediately(pointsWithCache);
+        const rawPoints = processDataFromObjects(points);
+        showPointsImmediately(rawPoints);
         
         // Запускаем фоновое геокодирование
-        startProgressiveGeocoding(pointsWithCache);
+        startProgressiveGeocoding(rawPoints);
         
         updateStatus(`Загружено: ${points.length} точек`);
-        showNotification('Данные загружены через CSV с использованием кэша', 'success');
+        showNotification('Данные загружены через CSV', 'success');
         
     } catch (error) {
         console.error('Ошибка альтернативной загрузки:', error);
@@ -1576,7 +1195,54 @@ async function tryAlternativeLoad() {
     }
 }
 
-// ========== ОБРАБОТКА ДАННЫХ ==========
+function showDemoData() {
+    console.log('Показываем демо-данные...');
+    
+    // Создаем демо-точки для теста
+    const demoPoints = [
+        {
+            id: 'demo_1',
+            name: 'Магнит №123',
+            region: 'Москва',
+            address: 'ул. Тверская, д. 1',
+            status: 'сдан',
+            manager: 'Иванов И.И.',
+            contractor: 'Иванов И.И.',
+            lat: 55.7570,
+            lng: 37.6145
+        },
+        {
+            id: 'demo_2',
+            name: 'Магнит №124',
+            region: 'Московская обл.',
+            address: 'г. Химки, ул. Ленина, 25',
+            status: 'сдан',
+            manager: 'Иванов И.И.',
+            contractor: 'Иванов И.И.',
+            lat: 55.8890,
+            lng: 37.4450
+        },
+        {
+            id: 'demo_3',
+            name: 'Басенджи',
+            region: 'Алтайский край',
+            address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
+            status: 'сдан',
+            manager: 'Казак Светлана',
+            contractor: 'Дмитриев Александр',
+            lat: 53.3481 + (Math.random() - 0.5) * 0.5,
+            lng: 83.7794 + (Math.random() - 0.5) * 1.0
+        }
+    ];
+    
+    // Сразу показываем точки
+    showPointsImmediately(demoPoints);
+    allPoints = demoPoints;
+    
+    updateStatus('Демо-данные загружены');
+    showNotification('Используются демо-данные. Проверьте доступ к таблице.', 'warning');
+}
+
 async function loadDataAsCSV() {
     // Формируем URL для экспорта всей книги как CSV
     const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv&id=${CONFIG.SPREADSHEET_ID}`;
@@ -1772,59 +1438,6 @@ function findColumnIndices(headers) {
     return indices;
 }
 
-// ========== ДЕМО-ДАННЫЕ ==========
-function showDemoData() {
-    console.log('Показываем демо-данные...');
-    
-    // Создаем демо-точки для теста
-    const demoPoints = [
-        {
-            id: 'demo_1',
-            name: 'Магнит №123',
-            region: 'Москва',
-            address: 'ул. Тверская, д. 1',
-            status: 'сдан',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            lat: 55.7570,
-            lng: 37.6145,
-            fromCache: false
-        },
-        {
-            id: 'demo_2',
-            name: 'Магнит №124',
-            region: 'Московская обл.',
-            address: 'г. Химки, ул. Ленина, 25',
-            status: 'сдан',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            lat: 55.8890,
-            lng: 37.4450,
-            fromCache: false
-        },
-        {
-            id: 'demo_3',
-            name: 'Басенджи',
-            region: 'Алтайский край',
-            address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
-            status: 'сдан',
-            manager: 'Казак Светлана',
-            contractor: 'Дмитриев Александр',
-            lat: 53.3481 + (Math.random() - 0.5) * 0.5,
-            lng: 83.7794 + (Math.random() - 0.5) * 1.0,
-            fromCache: false
-        }
-    ];
-    
-    // Сразу показываем точки
-    showPointsImmediately(demoPoints);
-    allPoints = demoPoints;
-    
-    updateStatus('Демо-данные загружены');
-    showNotification('Используются демо-данные. Проверьте доступ к таблице.', 'warning');
-}
-
-// ========== АВТООБНОВЛЕНИЕ ==========
 function setupAutoUpdate() {
     if (CONFIG.UPDATE.auto) {
         updateInterval = setInterval(() => {
@@ -1843,5 +1456,3 @@ window.applyFilters = applyFilters;
 window.searchPoints = searchPoints;
 window.closeModal = closeModal;
 window.improveGeocoding = improveGeocoding;
-window.clearCache = clearCache;
-window.exportCache = exportCache;
