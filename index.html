@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек</title>
+    <title>Карта торговых точек с автономным геокодированием</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -22,9 +22,9 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ</h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ <span style="font-size: 14px; color: #3498db;">(Автономная)</span></h1>
                 <div class="status" id="status">
-                    <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
+                    <i class="fas fa-sync-alt fa-spin"></i> Инициализация автономного геокодера...
                 </div>
             </div>
             
@@ -49,6 +49,26 @@
                         <div class="stat-label">Показано</div>
                     </div>
                 </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #f39c12;">
+                        <i class="fas fa-bullseye"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="exact-points">0</div>
+                        <div class="stat-label">Точные</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #e74c3c;">
+                        <i class="fas fa-map-marker-alt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="approx-points">0</div>
+                        <div class="stat-label">Приблизительные</div>
+                    </div>
+                </div>
             </div>
             
             <!-- Управление -->
@@ -61,6 +81,9 @@
                 </button>
                 <button class="btn btn-info" onclick="improveGeocoding()" title="Улучшить точность координат">
                     <i class="fas fa-map-marker-alt"></i> Уточнить координаты
+                </button>
+                <button class="btn btn-success" onclick="testAutonomousGeocoder()" title="Тест автономного геокодера">
+                    <i class="fas fa-vial"></i> Тест геокодера
                 </button>
             </div>
             
@@ -96,6 +119,15 @@
                     </select>
                 </div>
                 
+                <div class="filter-group">
+                    <label>Точность координат:</label>
+                    <select id="filter-precision" class="filter-select">
+                        <option value="">Все</option>
+                        <option value="exact">Только точные</option>
+                        <option value="approx">Только приблизительные</option>
+                    </select>
+                </div>
+                
                 <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
                     <i class="fas fa-check"></i> Применить фильтры
                 </button>
@@ -105,6 +137,16 @@
             <div class="point-info" id="point-info" style="display: none;">
                 <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
                 <div id="point-details"></div>
+            </div>
+            
+            <!-- Информация о геокодере -->
+            <div class="geocoder-info" style="background: #2c3e50; margin: 20px; padding: 15px; border-radius: 10px; font-size: 12px; color: #95a5a6;">
+                <h5><i class="fas fa-cogs"></i> Автономный геокодер</h5>
+                <div id="geocoder-stats">
+                    <div>Источники: Локальная база, OpenStreetMap, Яндекс.Карты</div>
+                    <div>Кэширование: Включено</div>
+                    <div>Режим: Автономный (без API ключей)</div>
+                </div>
             </div>
         </div>
         
@@ -141,6 +183,9 @@
     
     <!-- Конфигурация -->
     <script src="config.js"></script>
+    
+    <!-- Автономный геокодер -->
+    <script src="autonomous_geocoder.js"></script>
     
     <!-- Приложение -->
     <script src="app.js"></script>
