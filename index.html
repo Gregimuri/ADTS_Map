@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек с мгновенной загрузкой</title>
+    <title>Карта торговых точек с умным геокодированием</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -15,116 +15,6 @@
     
     <!-- Стили -->
     <link rel="stylesheet" href="style.css">
-    
-    <style>
-        .progress-container {
-            margin: 15px 20px;
-            background: #2c3e50;
-            border-radius: 10px;
-            overflow: hidden;
-            height: 20px;
-            position: relative;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #3498db, #2ecc71);
-            transition: width 0.5s ease;
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            min-width: 20px;
-        }
-        
-        .progress-text {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-size: 11px;
-            font-weight: bold;
-            line-height: 20px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-        
-        .stats-card {
-            background: #2c3e50;
-            border-radius: 10px;
-            padding: 15px;
-            margin: 0 20px 15px;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-        }
-        
-        .stat-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .stat-badge {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            color: white;
-        }
-        
-        .stat-text {
-            font-size: 12px;
-        }
-        
-        .stat-value {
-            font-weight: bold;
-            font-size: 16px;
-            color: white;
-        }
-        
-        .stat-label {
-            font-size: 11px;
-            color: #95a5a6;
-        }
-        
-        .geocoding-active {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
-        }
-        
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -132,62 +22,13 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ <span style="font-size: 14px; color: #3498db;">(Мгновенная загрузка)</span></h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ PRO</h1>
                 <div class="status" id="status">
-                    <i class="fas fa-sync-alt fa-spin"></i> Инициализация...
+                    <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
                 </div>
             </div>
             
-            <!-- Прогресс-бар -->
-            <div class="progress-container" id="progress-container" style="display: none;">
-                <div class="progress-bar" id="progress-bar"></div>
-                <div class="progress-text" id="progress-text">0%</div>
-            </div>
-            
-            <!-- Статистика загрузки -->
-            <div class="stats-card" id="loading-stats" style="display: none;">
-                <div class="stat-item">
-                    <div class="stat-badge" style="background: #3498db;">
-                        <i class="fas fa-store"></i>
-                    </div>
-                    <div class="stat-text">
-                        <div class="stat-value" id="total-loaded">0</div>
-                        <div class="stat-label">Всего точек</div>
-                    </div>
-                </div>
-                
-                <div class="stat-item">
-                    <div class="stat-badge" style="background: #2ecc71;">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div class="stat-text">
-                        <div class="stat-value" id="exact-loaded">0</div>
-                        <div class="stat-label">Точные</div>
-                    </div>
-                </div>
-                
-                <div class="stat-item">
-                    <div class="stat-badge" style="background: #f39c12;">
-                        <i class="fas fa-map-marker-alt"></i>
-                    </div>
-                    <div class="stat-text">
-                        <div class="stat-value" id="approx-loaded">0</div>
-                        <div class="stat-label">Приблизительные</div>
-                    </div>
-                </div>
-                
-                <div class="stat-item">
-                    <div class="stat-badge" style="background: #95a5a6;">
-                        <i class="fas fa-sync-alt"></i>
-                    </div>
-                    <div class="stat-text">
-                        <div class="stat-value" id="pending-loaded">0</div>
-                        <div class="stat-label">В обработке</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Основная статистика -->
+            <!-- Статистика -->
             <div class="stats">
                 <div class="stat-card">
                     <div class="stat-icon" style="background: #3498db;">
@@ -210,22 +51,22 @@
                 </div>
                 
                 <div class="stat-card">
-                    <div class="stat-icon" style="background: #2ecc71;">
+                    <div class="stat-icon" style="background: #f39c12;">
                         <i class="fas fa-bullseye"></i>
                     </div>
                     <div class="stat-info">
-                        <div class="stat-value" id="exact-points">0</div>
-                        <div class="stat-label">Точные</div>
+                        <div class="stat-value" id="accurate-points">0</div>
+                        <div class="stat-label">Точных</div>
                     </div>
                 </div>
                 
                 <div class="stat-card">
-                    <div class="stat-icon" style="background: #f39c12;">
+                    <div class="stat-icon" style="background: #9b59b6;">
                         <i class="fas fa-map-marker-alt"></i>
                     </div>
                     <div class="stat-info">
-                        <div class="stat-value" id="approx-points">0</div>
-                        <div class="stat-label">Приблизительные</div>
+                        <div class="stat-value" id="regions-count">0</div>
+                        <div class="stat-label">Регионов</div>
                     </div>
                 </div>
             </div>
@@ -241,8 +82,8 @@
                 <button class="btn btn-info" onclick="improveGeocoding()" title="Улучшить точность координат">
                     <i class="fas fa-map-marker-alt"></i> Уточнить координаты
                 </button>
-                <button class="btn btn-success" onclick="testAutonomousGeocoder()" title="Тест автономного геокодера">
-                    <i class="fas fa-vial"></i> Тест геокодера
+                <button class="btn btn-warning" onclick="showRegionStatsModal()" title="Статистика по регионам">
+                    <i class="fas fa-chart-bar"></i> Статистика
                 </button>
             </div>
             
@@ -258,7 +99,7 @@
                 </div>
                 
                 <div class="filter-group">
-                    <label>Регион:</label>
+                    <label><i class="fas fa-globe-europe"></i> Регион:</label>
                     <select id="filter-region" multiple class="filter-select">
                         <option value="">Все регионы</option>
                     </select>
@@ -278,34 +119,23 @@
                     </select>
                 </div>
                 
-                <div class="filter-group">
-                    <label>Точность координат:</label>
-                    <select id="filter-precision" class="filter-select">
-                        <option value="">Все</option>
-                        <option value="exact">Только точные</option>
-                        <option value="approx">Только приблизительные</option>
-                    </select>
-                </div>
+                <!-- Город будет добавлен динамически -->
                 
                 <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
                     <i class="fas fa-check"></i> Применить фильтры
                 </button>
             </div>
             
+            <!-- Статистика по регионам (мини) -->
+            <div class="region-stats-mini" id="region-stats-mini" style="display: none;">
+                <h4><i class="fas fa-chart-pie"></i> Статистика геокодирования</h4>
+                <div id="region-stats-mini-content"></div>
+            </div>
+            
             <!-- Информация о точке -->
             <div class="point-info" id="point-info" style="display: none;">
                 <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
                 <div id="point-details"></div>
-            </div>
-            
-            <!-- Информация о геокодере -->
-            <div class="geocoder-info" style="background: #2c3e50; margin: 20px; padding: 15px; border-radius: 10px; font-size: 12px; color: #95a5a6;">
-                <h5><i class="fas fa-cogs"></i> Автономный геокодер</h5>
-                <div id="geocoder-stats">
-                    <div><i class="fas fa-bolt" style="color: #2ecc71;"></i> Мгновенная загрузка точек</div>
-                    <div><i class="fas fa-database" style="color: #3498db;"></i> Локальная база + OpenStreetMap</div>
-                    <div><i class="fas fa-sync-alt fa-spin geocoding-active" style="color: #f39c12;"></i> Фоновое улучшение координат</div>
-                </div>
             </div>
         </div>
         
@@ -315,30 +145,15 @@
             
             <!-- Поиск -->
             <div class="search-box">
-                <input type="text" id="search" placeholder="Поиск по названию или адресу...">
+                <input type="text" id="search" placeholder="Поиск по названию, адресу или региону...">
                 <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
             </div>
             
             <!-- Легенда -->
             <div class="legend">
                 <h5><i class="fas fa-key"></i> Легенда</h5>
-                <div id="legend">
-                    <div style="margin-bottom: 10px;">
-                        <strong style="font-size: 12px; color: #666;">Статус загрузки:</strong>
-                        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                            <div style="width: 15px; height: 15px; background: #3498db; border-radius: 50%; border: 2px solid white; animation: pulse 2s infinite;"></div>
-                            <span style="font-size: 11px;">Идет поиск координат</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                            <div style="width: 15px; height: 15px; background: #2ecc71; border-radius: 50%; border: 2px solid white;"></div>
-                            <span style="font-size: 11px;">Точные координаты</span>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
-                            <div style="width: 15px; height: 15px; background: #f39c12; border-radius: 50%; border: 2px solid white;"></div>
-                            <span style="font-size: 11px;">Приблизительные</span>
-                        </div>
-                    </div>
-                </div>
+                <div id="legend"></div>
+                <div id="region-stats" style="margin-top: 15px;"></div>
             </div>
         </div>
     </div>
@@ -351,6 +166,20 @@
             <button class="btn btn-primary" onclick="closeModal()">OK</button>
         </div>
     </div>
+    
+    <!-- Модальное окно статистики -->
+    <div id="stats-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 700px;">
+            <h3><i class="fas fa-chart-bar"></i> Статистика по регионам</h3>
+            <div id="stats-modal-content" style="max-height: 400px; overflow-y: auto; margin: 20px 0;"></div>
+            <div class="controls" style="margin-top: 20px;">
+                <button class="btn btn-primary" onclick="closeStatsModal()">Закрыть</button>
+                <button class="btn btn-secondary" onclick="exportStats()">
+                    <i class="fas fa-download"></i> Экспорт
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Библиотеки -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -359,63 +188,155 @@
     <!-- Конфигурация -->
     <script src="config.js"></script>
     
-    <!-- Автономный геокодер -->
-    <script src="autonomous_geocoder.js"></script>
-    
     <!-- Приложение -->
     <script src="app.js"></script>
     
+    <!-- Дополнительные функции -->
     <script>
-        // Дополнительные функции для обновления UI
-        window.testAutonomousGeocoder = async function() {
-            if (!autonomousGeocoder) {
-                showNotification('Геокодер не инициализирован', 'error');
-                return;
-            }
+    function showRegionStatsModal() {
+        const modal = document.getElementById('stats-modal');
+        const content = document.getElementById('stats-modal-content');
+        
+        if (!regionStats || Object.keys(regionStats).length === 0) {
+            content.innerHTML = '<p style="color: #95a5a6;">Статистика не доступна</p>';
+            modal.style.display = 'flex';
+            return;
+        }
+        
+        let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">';
+        
+        // Сортируем регионы по количеству точек
+        const sortedRegions = Object.entries(regionStats)
+            .filter(([region, stats]) => stats.total > 0)
+            .sort((a, b) => b[1].total - a[1].total);
+        
+        sortedRegions.forEach(([region, stats]) => {
+            const successRate = stats.total > 0 ? Math.round((stats.geocoded / stats.total) * 100) : 0;
+            const color = successRate > 80 ? '#2ecc71' : successRate > 50 ? '#f39c12' : '#e74c3c';
             
-            const testAddresses = [
-                'Москва, Красная площадь',
-                'Алтайский край, Барнаул, ул. Попова, 114/1',
-                'Санкт-Петербург, Невский проспект'
-            ];
+            const citiesList = Array.from(stats.cities).slice(0, 5).join(', ');
             
-            showModal('Тест геокодера', 'Тестирую автономный геокодер...');
-            
-            let results = [];
-            for (let i = 0; i < testAddresses.length; i++) {
-                const address = testAddresses[i];
-                updateModal('Тест геокодера', `Тестирую: ${address}\n${i+1}/${testAddresses.length}`);
+            html += `
+                <div style="background: #2c3e50; padding: 15px; border-radius: 8px; border-left: 4px solid ${color};">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <h4 style="margin: 0; font-size: 14px; color: white;">${region}</h4>
+                        <span style="font-size: 12px; color: #95a5a6;">${stats.total} точек</span>
+                    </div>
+                    
+                    <div style="margin-bottom: 10px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px;">
+                            <span>Точность геокодирования:</span>
+                            <span style="color: ${color}; font-weight: bold;">${successRate}%</span>
+                        </div>
+                        <div style="height: 6px; background: #34495e; border-radius: 3px; overflow: hidden;">
+                            <div style="width: ${successRate}%; height: 100%; background: ${color};"></div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; color: #95a5a6;">
+                        <div>
+                            <i class="fas fa-check-circle" style="color: #2ecc71;"></i>
+                            <span> ${stats.geocoded} точных</span>
+                        </div>
+                        <div>
+                            <i class="fas fa-map-marker-alt" style="color: #f39c12;"></i>
+                            <span> ${stats.approximate} приблизительных</span>
+                        </div>
+                        <div>
+                            <i class="fas fa-times-circle" style="color: #e74c3c;"></i>
+                            <span> ${stats.failed} не найдено</span>
+                        </div>
+                        <div>
+                            <i class="fas fa-city"></i>
+                            <span> ${stats.cities.size} городов</span>
+                        </div>
+                    </div>
+                    
+                    ${citiesList ? `
+                        <div style="margin-top: 10px; font-size: 10px; color: #95a5a6;">
+                            <i class="fas fa-city"></i> Города: ${citiesList}${stats.cities.size > 5 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        // Общая статистика
+        const totalPoints = allPoints.length;
+        const accuratePoints = allPoints.filter(p => p.lat && p.lng && !p.isMock).length;
+        const approximatePoints = allPoints.filter(p => p.isMock).length;
+        const failedPoints = allPoints.filter(p => !p.lat || !p.lng).length;
+        
+        const summaryHtml = `
+            <div style="background: #34495e; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                <h4 style="margin: 0 0 15px 0; color: white;">Общая статистика</h4>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; text-align: center;">
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold; color: #3498db;">${totalPoints}</div>
+                        <div style="font-size: 11px; color: #95a5a6;">Всего точек</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold; color: #2ecc71;">${accuratePoints}</div>
+                        <div style="font-size: 11px; color: #95a5a6;">Точных координат</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold; color: #f39c12;">${approximatePoints}</div>
+                        <div style="font-size: 11px; color: #95a5a6;">Приблизительных</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">${failedPoints}</div>
+                        <div style="font-size: 11px; color: #95a5a6;">Не найдено</div>
+                    </div>
+                </div>
+                <div style="margin-top: 15px; text-align: center; font-size: 12px; color: #95a5a6;">
+                    <i class="fas fa-info-circle"></i> 
+                    Точность геокодирования: ${totalPoints > 0 ? Math.round((accuratePoints / totalPoints) * 100) : 0}%
+                </div>
+            </div>
+        `;
+        
+        content.innerHTML = html + summaryHtml;
+        modal.style.display = 'flex';
+    }
+    
+    function closeStatsModal() {
+        document.getElementById('stats-modal').style.display = 'none';
+    }
+    
+    function exportStats() {
+        if (!regionStats || Object.keys(regionStats).length === 0) {
+            alert('Нет данных для экспорта');
+            return;
+        }
+        
+        // Создаем CSV содержимое
+        let csv = 'Регион;Всего точек;Точных координат;Приблизительных;Не найдено;Города;Точность(%)\n';
+        
+        Object.entries(regionStats)
+            .filter(([region, stats]) => stats.total > 0)
+            .sort((a, b) => b[1].total - a[1].total)
+            .forEach(([region, stats]) => {
+                const successRate = stats.total > 0 ? Math.round((stats.geocoded / stats.total) * 100) : 0;
+                const cities = Array.from(stats.cities).join(', ');
                 
-                try {
-                    const result = await autonomousGeocoder.geocode(address);
-                    results.push({
-                        address: address,
-                        success: !!result,
-                        coordinates: result ? `${result.lat.toFixed(6)}, ${result.lng.toFixed(6)}` : null,
-                        source: result ? result.source : null
-                    });
-                } catch (error) {
-                    results.push({
-                        address: address,
-                        success: false,
-                        error: error.message
-                    });
-                }
-                
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-            
-            let message = 'Результаты теста:\n\n';
-            results.forEach(r => {
-                if (r.success) {
-                    message += `✅ ${r.address}\n   ${r.coordinates} (${r.source})\n\n`;
-                } else {
-                    message += `❌ ${r.address}\n   Не найдено\n\n`;
-                }
+                csv += `"${region}";${stats.total};${stats.geocoded};${stats.approximate};${stats.failed};"${cities}";${successRate}\n`;
             });
-            
-            updateModal('Результаты теста', message);
-        };
+        
+        // Создаем и скачиваем файл
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `region_stats_${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('Статистика экспортирована в CSV', 'success');
+    }
     </script>
 </body>
 </html>
