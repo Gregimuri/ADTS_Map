@@ -812,6 +812,12 @@ async function geocodeYandex(address, region = '') {
     try {
         const cleanAddress = normalizeAddress(address, region);
         const encodedAddress = encodeURIComponent(cleanAddress);
+        
+        // Вариант 1: Яндекс требует API ключ (получить на https://developer.tech.yandex.ru/)
+        // const apiKey = 'ВАШ_API_КЛЮЧ_ЯНДЕКС';
+        // const url = `https://geocode-maps.yandex.ru/1.x/?apikey=${apiKey}&format=json&geocode=${encodedAddress}&results=1`;
+        
+        // Вариант 2: Публичный эндпоинт (менее надежный)
         const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encodedAddress}&results=1`;
         
         console.log(`Геокодирование Яндекс: ${cleanAddress.substring(0, 50)}...`);
@@ -841,9 +847,52 @@ async function geocodeYandex(address, region = '') {
                 console.log(`Яндекс нашел координаты: ${lat}, ${lon}`);
                 return { lat, lng: lon, source: 'yandex', isExact: true };
             }
+        } else {
+            console.warn(`Яндекс API вернул ошибку: ${response.status}`);
         }
     } catch (error) {
         console.warn('Ошибка геокодирования Яндекс:', error);
+    }
+    
+    return null;
+}
+
+async function geocodeGoogle(address, region = '') {
+    if (!CONFIG.GEOCODING?.enabled) return null;
+    
+    try {
+        const cleanAddress = normalizeAddress(address, region);
+        const encodedAddress = encodeURIComponent(cleanAddress);
+        
+        // Используем публичный эндпоинт (может иметь лимиты)
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&region=ru&language=ru`;
+        
+        console.log(`Геокодирование Google: ${cleanAddress.substring(0, 50)}...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Уважаем лимиты
+        
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'TTMapApp/1.0',
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.status === 'OK' && data.results && data.results.length > 0) {
+                const location = data.results[0].geometry.location;
+                const lat = location.lat;
+                const lng = location.lng;
+                
+                console.log(`Google нашел координаты: ${lat}, ${lng}`);
+                return { lat, lng, source: 'google', isExact: true };
+            } else {
+                console.warn(`Google API вернул статус: ${data.status}`);
+            }
+        }
+    } catch (error) {
+        console.warn('Ошибка геокодирования Google:', error);
     }
     
     return null;
@@ -888,30 +937,55 @@ async function geocodeNominatim(address, region = '') {
 
 async function geocodeAddress(address, region = '', pointId = null) {
     if (!CONFIG.GEOCODING?.enabled || !address) {
+        console.log('Геокодирование отключено или нет адреса, возвращаем случайные координаты');
         return getRandomCoordinate(address, region);
     }
     
+    console.log(`Начинаю геокодирование для: ${address.substring(0, 100)}...`);
+    
+    // Проверяем кэш
     const cached = getCachedCoordinates(address, region);
     if (cached) {
         console.log(`Координаты из кэша для: ${address.substring(0, 50)}...`);
         return cached;
     }
     
-    let result = await geocodeYandex(address, region);
+    let result = null;
     
-    if (!result) {
-        result = await geocodeNominatim(address, region);
-    }
-    
-    if (result && result.isExact) {
-        cacheCoordinates(address, region, result.lat, result.lng, result.source, true);
+    // Пробуем разные провайдеры по порядку
+    try {
+        // Сначала Яндекс (требует API ключ)
+        result = await geocodeYandex(address, region);
         
-        if (pointId) {
-            updatePointCoordinates(pointId, result.lat, result.lng, result.source);
+        // Если Яндекс не сработал, пробуем OSM
+        if (!result) {
+            console.log('Яндекс не ответил, пробую OSM...');
+            result = await geocodeNominatim(address, region);
         }
+        
+        // Если OSM не сработал, пробуем Google
+        if (!result) {
+            console.log('OSM не ответил, пробую Google...');
+            result = await geocodeGoogle(address, region);
+        }
+        
+        // Если получили точные координаты, кэшируем
+        if (result && result.isExact) {
+            console.log(`Успешное геокодирование, кэширую: ${address.substring(0, 50)}...`);
+            cacheCoordinates(address, region, result.lat, result.lng, result.source, true);
+            
+            if (pointId) {
+                updatePointCoordinates(pointId, result.lat, result.lng, result.source);
+            }
+        }
+        
+    } catch (error) {
+        console.error('Ошибка в процессе геокодирования:', error);
     }
     
+    // Если все провайдеры не сработали, возвращаем случайные координаты
     if (!result) {
+        console.log('Все провайдеры не сработали, возвращаю случайные координаты');
         result = getRandomCoordinate(address, region);
         cacheCoordinates(address, region, result.lat, result.lng, 'random', false);
     }
@@ -1833,6 +1907,50 @@ function showGeocodingStats() {
     showModal('Статистика геокодирования', message);
 }
 
+function testGeocoding() {
+    console.log('=== Тестирование геокодирования ===');
+    
+    const testAddresses = [
+        'Москва, Красная площадь, 1',
+        'Санкт-Петербург, Невский проспект, 28',
+        'Екатеринбург, проспект Ленина, 24'
+    ];
+    
+    testAddresses.forEach(async (address, index) => {
+        console.log(`\nТест ${index + 1}: ${address}`);
+        
+        // Проверяем кэш
+        const cached = getCachedCoordinates(address);
+        if (cached) {
+            console.log('✓ Из кэша:', cached);
+            return;
+        }
+        
+        // Тестируем провайдеры
+        console.log('Тестирую Яндекс...');
+        const yandexResult = await geocodeYandex(address);
+        console.log('Яндекс:', yandexResult ? '✓' : '✗');
+        
+        console.log('Тестирую OSM...');
+        const osmResult = await geocodeNominatim(address);
+        console.log('OSM:', osmResult ? '✓' : '✗');
+        
+        console.log('Тестирую Google...');
+        const googleResult = await geocodeGoogle(address);
+        console.log('Google:', googleResult ? '✓' : '✗');
+        
+        // Итоговое геокодирование
+        console.log('Полное геокодирование...');
+        const finalResult = await geocodeAddress(address);
+        console.log('Итог:', finalResult);
+    });
+    
+    console.log('=== Тест завершен ===');
+}
+
+// Добавьте в экспорт
+window.testGeocoding = testGeocoding;
+
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM загружен, запускаю приложение...');
@@ -1872,3 +1990,4 @@ setInterval(() => {
     const isActive = window.isGeocodingActive || false;
     window.updateGeocodingIndicator(isActive, queueSize);
 }, 1000);
+
