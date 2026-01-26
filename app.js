@@ -477,55 +477,211 @@ function processData(rows) {
 }
 
 function findColumnIndices(headers) {
-    console.log('Определяю колонки для заголовков:', headers);
+    console.log('🔍 Определяю колонки для заголовков:');
+    headers.forEach((h, i) => console.log(`  [${i}] "${h}"`));
     
-    // Приведем все заголовки к нижнему регистру для сравнения
-    const headersLower = headers.map(h => h.toString().toLowerCase().trim());
-    
-    // Простая прямая проверка по известным заголовкам из вашей таблицы
     const indices = {
-        name: headersLower.findIndex(h => h.includes('название тт') || h.includes('название')),
-        region: headersLower.findIndex(h => h.includes('регион')),
-        address: headersLower.findIndex(h => h.includes('адрес')),
-        status: headersLower.findIndex(h => h.includes('статус тт') || h.includes('статус')),
-        manager: headersLower.findIndex(h => h.includes('менеджер фио') || h.includes('менеджер')),
-        contractor: headersLower.findIndex(h => h.includes('подрядчик фио') || h.includes('подрядчик'))
+        name: -1,
+        region: -1,
+        address: -1,
+        status: -1,
+        manager: -1,
+        contractor: -1
     };
     
-    // Если не нашли стандартные названия, ищем альтернативные
-    if (indices.name === -1) {
-        // Ищем первую колонку как название
-        indices.name = 0;
-        console.log('  ⚠️  Название: использована первая колонка');
+    // Преобразуем заголовки к нижнему регистру для сравнения
+    const headersLower = headers.map(h => h.toString().toLowerCase().trim());
+    
+    // Шаг 1: Ищем точные совпадения с известными заголовками из вашей таблицы
+    const exactMatches = {
+        'название тт': 'name',
+        'регион': 'region', 
+        'адрес': 'address',
+        'статус тт': 'status',
+        'статус': 'status',
+        'менеджер фио': 'manager',
+        'менеджер': 'manager',
+        'подрядчик фио': 'contractor',
+        'подрядчик': 'contractor'
+    };
+    
+    // Проверяем точные совпадения
+    headersLower.forEach((header, index) => {
+        if (exactMatches[header]) {
+            const field = exactMatches[header];
+            if (indices[field] === -1) {
+                indices[field] = index;
+                console.log(`✓ Точное совпадение: ${field} -> колонка ${index} ("${headers[index]}")`);
+            }
+        }
+    });
+    
+    // Шаг 2: Ищем частичные совпадения для незаполненных полей
+    const searchPatterns = {
+        name: [
+            { pattern: 'название', priority: 1 },
+            { pattern: 'магазин', priority: 2 },
+            { pattern: 'точка', priority: 3 },
+            { pattern: 'тт', priority: 4 }
+        ],
+        region: [
+            { pattern: 'регион', priority: 1 },
+            { pattern: 'область', priority: 2 },
+            { pattern: 'край', priority: 3 },
+            { pattern: 'респ', priority: 4 },
+            { pattern: 'город', priority: 5 }
+        ],
+        address: [
+            { pattern: 'адрес', priority: 1 },
+            { pattern: 'местоположение', priority: 2 },
+            { pattern: 'место', priority: 3 },
+            { pattern: 'локация', priority: 4 }
+        ],
+        status: [
+            { pattern: 'статус тт', priority: 1 },
+            { pattern: 'статус', priority: 2 },
+            { pattern: 'состояние', priority: 3 }
+        ],
+        manager: [
+            { pattern: 'менеджер фио', priority: 1 },
+            { pattern: 'менеджер', priority: 2 },
+            { pattern: 'фио менеджера', priority: 3 },
+            { pattern: 'ответственный', priority: 4 }
+        ],
+        contractor: [
+            { pattern: 'подрядчик фио', priority: 1 },
+            { pattern: 'подрядчик', priority: 2 },
+            { pattern: 'фио подрядчика', priority: 3 },
+            { pattern: 'исполнитель', priority: 4 }
+        ]
+    };
+    
+    // Ищем частичные совпадения для незаполненных полей
+    Object.keys(searchPatterns).forEach(field => {
+        if (indices[field] === -1) {
+            for (const search of searchPatterns[field]) {
+                const foundIndex = headersLower.findIndex(h => h.includes(search.pattern));
+                if (foundIndex !== -1 && !Object.values(indices).includes(foundIndex)) {
+                    indices[field] = foundIndex;
+                    console.log(`✓ Частичное совпадение: ${field} -> колонка ${foundIndex} ("${headers[foundIndex]}") по шаблону "${search.pattern}"`);
+                    break;
+                }
+            }
+        }
+    });
+    
+    // Шаг 3: Если какие-то поля не найдены, используем эвристики
+    
+    // Для названия: первая колонка, если она не очень длинная
+    if (indices.name === -1 && headers[0]) {
+        if (headers[0].length < 50) {
+            indices.name = 0;
+            console.log(`⚠️  Название: предполагаю колонку 0 ("${headers[0]}")`);
+        }
     }
     
+    // Для региона: ищем колонку с короткими значениями (1-3 слова)
     if (indices.region === -1) {
-        // Ищем колонку с короткими значениями (скорее всего регион)
         for (let i = 0; i < headers.length; i++) {
-            if (headers[i] && headers[i].length < 30 && !headers[i].toLowerCase().includes('адрес')) {
+            if (headers[i] && headers[i].split(' ').length <= 3 && 
+                !headers[i].toLowerCase().includes('адрес') &&
+                !headers[i].toLowerCase().includes('статус') &&
+                !Object.values(indices).includes(i)) {
                 indices.region = i;
-                console.log(`  ⚠️  Регион: предположительно колонка ${i} ("${headers[i]}")`);
+                console.log(`⚠️  Регион: предполагаю колонку ${i} ("${headers[i]}") - короткое значение`);
                 break;
             }
         }
     }
     
+    // Для адреса: ищем колонку с самым длинным заголовком или содержащую запятые в данных
     if (indices.address === -1) {
-        // Ищем колонку с самыми длинными значениями (скорее всего адрес)
-        indices.address = headers.length > 2 ? 2 : 1; // По умолчанию третья колонка
-        console.log(`  ⚠️  Адрес: предположительно колонка ${indices.address}`);
+        // Пробуем колонку 2 (типичное положение адреса)
+        if (headers.length > 2 && !Object.values(indices).includes(2)) {
+            indices.address = 2;
+            console.log(`⚠️  Адрес: предполагаю колонку 2 ("${headers[2] || 'N/A'}") - типичная позиция`);
+        }
     }
     
+    // Для статуса: ищем колонку с очень короткими значениями
     if (indices.status === -1) {
-        // Ищем колонку с короткими статусами
-        indices.status = headers.length > 3 ? 3 : 2;
-        console.log(`  ⚠️  Статус: предположительно колонка ${indices.status}`);
+        // Пробуем колонку 3 (типичное положение статуса)
+        if (headers.length > 3 && !Object.values(indices).includes(3)) {
+            indices.status = 3;
+            console.log(`⚠️  Статус: предполагаю колонку 3 ("${headers[3] || 'N/A'}") - типичная позиция`);
+        }
     }
     
-    console.log('Найденные индексы колонок:', indices);
+    // Для менеджера: ищем колонку с ФИО
+    if (indices.manager === -1) {
+        // Пробуем колонку 4
+        if (headers.length > 4 && !Object.values(indices).includes(4)) {
+            indices.manager = 4;
+            console.log(`⚠️  Менеджер: предполагаю колонку 4 ("${headers[4] || 'N/A'}")`);
+        }
+    }
+    
+    // Для подрядчика: ищем последнюю заполненную колонку
+    if (indices.contractor === -1) {
+        // Пробуем последнюю колонку
+        const lastIndex = headers.length - 1;
+        if (lastIndex >= 0 && !Object.values(indices).includes(lastIndex)) {
+            indices.contractor = lastIndex;
+            console.log(`⚠️  Подрядчик: предполагаю последнюю колонку ${lastIndex} ("${headers[lastIndex] || 'N/A'}")`);
+        }
+    }
+    
+    // Шаг 4: Финальная проверка и корректировка
+    
+    // Проверяем, что все индексы уникальны
+    const usedIndices = Object.values(indices).filter(i => i !== -1);
+    const uniqueIndices = [...new Set(usedIndices)];
+    
+    if (usedIndices.length !== uniqueIndices.length) {
+        console.warn('⚠️ Обнаружены дублирующиеся индексы колонок!');
+        
+        // Сбрасываем конфликтующие индексы
+        const duplicates = usedIndices.filter((item, index) => usedIndices.indexOf(item) !== index);
+        duplicates.forEach(dupIndex => {
+            Object.keys(indices).forEach(key => {
+                if (indices[key] === dupIndex) {
+                    console.log(`  Сброс: ${key} (был индекс ${dupIndex})`);
+                    indices[key] = -1;
+                }
+            });
+        });
+        
+        // Заполняем сброшенные индексы по порядку
+        let nextIndex = 0;
+        Object.keys(indices).forEach(key => {
+            if (indices[key] === -1) {
+                while (Object.values(indices).includes(nextIndex)) {
+                    nextIndex++;
+                }
+                indices[key] = nextIndex;
+                console.log(`  Назначен новый индекс: ${key} -> ${nextIndex}`);
+                nextIndex++;
+            }
+        });
+    }
+    
+    // Проверяем, что у нас есть все необходимые колонки
+    const requiredFields = ['name', 'address'];
+    requiredFields.forEach(field => {
+        if (indices[field] === -1) {
+            console.error(`❌ Критическая ошибка: не найдена колонка для ${field}`);
+        }
+    });
+    
+    console.log('📊 Итоговые индексы колонок:');
+    Object.keys(indices).forEach(key => {
+        const index = indices[key];
+        const header = index !== -1 && index < headers.length ? headers[index] : 'N/A';
+        console.log(`  ${key}: ${index} -> "${header}"`);
+    });
+    
     return indices;
 }
-
 // ========== ГЕОКОДИРОВАНИЕ ==========
 function loadGeocodingCache() {
     try {
@@ -1704,5 +1860,6 @@ window.closeModal = closeModal;
 window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
+
 
 
