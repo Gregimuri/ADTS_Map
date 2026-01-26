@@ -99,7 +99,7 @@ function showModal(title, message) {
     
     if (modal && titleElement && messageElement) {
         titleElement.textContent = title;
-        messageElement.textContent = message;
+        messageElement.innerHTML = message;
         modal.style.display = 'flex';
     }
 }
@@ -125,7 +125,7 @@ function showNotification(message, type = 'info', duration = 5000) {
     document.querySelectorAll('.notification').forEach(el => el.remove());
     
     const notification = document.createElement('div');
-    notification.className = 'notification';
+    notification.className = `notification ${type}`;
     
     let icon = 'info-circle';
     if (type === 'success') icon = 'check-circle';
@@ -133,28 +133,8 @@ function showNotification(message, type = 'info', duration = 5000) {
     else if (type === 'warning') icon = 'exclamation-triangle';
     
     notification.innerHTML = `
-        <div style="
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            background: ${type === 'success' ? '#2ecc71' : 
-                         type === 'error' ? '#e74c3c' : 
-                         type === 'warning' ? '#f39c12' : '#3498db'};
-            color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 3000;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.3s ease;
-            max-width: 400px;
-            word-wrap: break-word;
-        ">
-            <i class="fas fa-${icon}"></i>
-            <span>${message}</span>
-        </div>
+        <i class="fas fa-${icon}"></i>
+        <span>${message}</span>
     `;
     
     document.body.appendChild(notification);
@@ -682,6 +662,7 @@ function findColumnIndices(headers) {
     
     return indices;
 }
+
 // ========== ГЕОКОДИРОВАНИЕ ==========
 function loadGeocodingCache() {
     try {
@@ -1049,15 +1030,22 @@ function updatePointCoordinates(pointId, lat, lng, source = 'unknown') {
 }
 
 function updateMarkerOnMap(pointId, point) {
+    let found = false;
     markerCluster.eachLayer((layer) => {
         if (layer.options && layer.options.pointId === pointId) {
             markerCluster.removeLayer(layer);
             const newMarker = createMarker(point);
             markerCluster.addLayer(newMarker);
             markersMap.set(pointId, newMarker);
-            return true;
+            found = true;
         }
     });
+    
+    if (!found) {
+        const newMarker = createMarker(point);
+        markerCluster.addLayer(newMarker);
+        markersMap.set(pointId, newMarker);
+    }
 }
 
 function addToGeocodingQueue(point) {
@@ -1621,6 +1609,7 @@ function showPointDetails(point) {
     infoSection.style.display = 'block';
     infoSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
 // ========== СТАТИСТИКА И ЛЕГЕНДА ==========
 function updateStatistics() {
     const filteredPoints = filterPoints();
@@ -1860,6 +1849,26 @@ window.closeModal = closeModal;
 window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
+window.geocodingQueue = geocodingQueue;
+window.isGeocodingActive = isGeocodingActive;
+window.updateGeocodingIndicator = function(active, queueSize = 0) {
+    const indicator = document.getElementById('geocoding-indicator');
+    if (!indicator) return;
+    
+    if (active || queueSize > 0) {
+        indicator.style.display = 'flex';
+        indicator.innerHTML = `
+            <div class="pulse"></div>
+            <span>${active ? 'Обработка...' : `В очереди: ${queueSize}`}</span>
+        `;
+    } else {
+        indicator.style.display = 'none';
+    }
+};
 
-
-
+// Обновление индикатора геокодирования
+setInterval(() => {
+    const queueSize = window.geocodingQueue ? window.geocodingQueue.length : 0;
+    const isActive = window.isGeocodingActive || false;
+    window.updateGeocodingIndicator(isActive, queueSize);
+}, 1000);
