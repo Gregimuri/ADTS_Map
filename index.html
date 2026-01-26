@@ -59,8 +59,21 @@
                 <button class="btn btn-secondary" onclick="clearFilters()">
                     <i class="fas fa-filter"></i> Сбросить фильтры
                 </button>
-                <button class="btn btn-info" onclick="improveGeocoding()" title="Улучшить точность координат">
-                    <i class="fas fa-map-marker-alt"></i> Уточнить координаты
+            </div>
+            
+            <!-- Геокодирование -->
+            <div class="geocoding-controls" style="padding: 0 20px 15px;">
+                <h4 style="color: white; margin-bottom: 10px;">
+                    <i class="fas fa-map-marker-alt"></i> Геокодирование
+                </h4>
+                <button class="btn btn-success" onclick="startManualGeocoding()" style="margin-bottom: 8px;">
+                    <i class="fas fa-search-location"></i> Найти координаты
+                </button>
+                <button class="btn btn-warning" onclick="stopGeocoding()" style="margin-bottom: 8px;">
+                    <i class="fas fa-stop-circle"></i> Остановить
+                </button>
+                <button class="btn btn-info" onclick="showGeocodingStats()">
+                    <i class="fas fa-chart-bar"></i> Статистика
                 </button>
             </div>
             
