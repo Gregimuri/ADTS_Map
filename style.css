@@ -161,6 +161,7 @@ body {
     background: rgba(0,0,0,0.1);
     border-radius: 8px;
     margin: 0 20px 20px;
+    padding: 15px;
 }
 
 /* Фильтры */
@@ -430,10 +431,6 @@ body {
     }
     
     .controls {
-        flex-direction: column;
-    }
-    
-    .geocoding-controls > div {
         flex-direction: column;
     }
 }
