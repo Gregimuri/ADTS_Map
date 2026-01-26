@@ -1,64 +1,947 @@
-/* Дополнительные стили для кнопок геокодирования */
-.btn-success {
-    background: #2ecc71;
+/* ========== СБРОС И БАЗОВЫЕ СТИЛИ ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ecf0f1;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ========== ОСНОВНОЙ КОНТЕЙНЕР ========== */
+.container {
+    display: flex;
+    height: 100vh;
+    background: rgba(44, 62, 80, 0.95);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* ========== САЙДБАР ========== */
+.sidebar {
+    width: 380px;
+    background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 5px 0 25px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    overflow-y: auto;
+    position: relative;
+}
+
+.sidebar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #3498db, #2ecc71, #f39c12);
+    z-index: 1001;
+}
+
+/* ========== ЗАГОЛОВОК ========== */
+.header {
+    padding: 25px;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    border-bottom: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.header::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(30px, -30px);
+}
+
+.header h1 {
+    font-size: 26px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
     color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.header h1 i {
+    color: #2ecc71;
+    font-size: 28px;
+}
+
+.status {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 12px;
+    border-radius: 6px;
+    backdrop-filter: blur(5px);
+}
+
+.status i {
+    color: #2ecc71;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+/* ========== СТАТИСТИКА ========== */
+.stats {
+    padding: 25px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.1) 0%, rgba(41, 128, 185, 0.1) 100%);
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(5px);
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+    border-color: rgba(52, 152, 219, 0.3);
+}
+
+.stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s;
+}
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.1);
+}
+
+.stat-info {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: white;
+    line-height: 1;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.stat-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    margin-top: 8px;
+    font-weight: 600;
+}
+
+/* ========== УПРАВЛЕНИЕ ========== */
+.controls {
+    padding: 0 25px 25px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+/* ========== КНОПКИ ========== */
+.btn {
+    padding: 14px 20px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex: 1;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 5px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.5);
+    opacity: 0;
+    border-radius: 100%;
+    transform: scale(1, 1) translate(-50%);
+    transform-origin: 50% 50%;
+}
+
+.btn:hover::after {
+    animation: ripple 1s ease-out;
+}
+
+@keyframes ripple {
+    0% {
+        transform: scale(0, 0);
+        opacity: 0.5;
+    }
+    100% {
+        transform: scale(40, 40);
+        opacity: 0;
+    }
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #3498db 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(52, 152, 219, 0.6);
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #7f8c8d 0%, #95a5a6 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(127, 140, 141, 0.4);
+}
+
+.btn-secondary:hover {
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(127, 140, 141, 0.6);
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);
 }
 
 .btn-success:hover {
-    background: #27ae60;
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(46, 204, 113, 0.6);
 }
 
 .btn-warning {
-    background: #f39c12;
+    background: linear-gradient(135deg, #f39c12 0%, #d68910 100%);
     color: white;
+    box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
 }
 
 .btn-warning:hover {
-    background: #d68910;
+    background: linear-gradient(135deg, #d68910 0%, #f39c12 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(243, 156, 18, 0.6);
 }
 
 .btn-info {
-    background: #3498db;
+    background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
     color: white;
+    box-shadow: 0 4px 15px rgba(155, 89, 182, 0.4);
 }
 
 .btn-info:hover {
-    background: #2980b9;
+    background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(155, 89, 182, 0.6);
 }
 
-/* Стили для секции геокодирования */
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* ========== УПРАВЛЕНИЕ ГЕОКОДИРОВАНИЕМ ========== */
 .geocoding-controls {
-    background: #2c3e50;
-    margin: 10px 20px;
-    padding: 15px;
-    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(44, 62, 80, 0.8) 0%, rgba(52, 73, 94, 0.8) 100%);
+    margin: 0 25px 25px;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid rgba(52, 152, 219, 0.2);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .geocoding-controls h4 {
     color: white;
     margin-bottom: 15px;
-    font-size: 16px;
+    font-size: 17px;
     display: flex;
     align-items: center;
+    gap: 12px;
+    font-weight: 600;
+}
+
+.geocoding-controls h4 i {
+    color: #3498db;
+    font-size: 18px;
+}
+
+.geocoding-buttons {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 10px;
 }
 
-/* Анимации для геокодирования */
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+/* ========== ФИЛЬТРЫ ========== */
+.filters {
+    padding: 25px;
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.1) 0%, rgba(41, 128, 185, 0.1) 100%);
+    margin: 0 25px 25px;
+    border-radius: 12px;
+    flex: 1;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.geocoding-in-progress {
-    animation: pulse 1.5s infinite;
+.filters h3 {
+    margin-bottom: 25px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
 }
 
-/* Стили для иконок источников */
-.geocode-source-yandex {
-    color: #ffcc00;
+.filters h3 i {
+    color: #3498db;
 }
 
-.geocode-source-osm {
-    color: #7bc96f;
+.filter-group {
+    margin-bottom: 18px;
+}
+
+.filter-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.filter-select {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    background: rgba(44, 62, 80, 0.7);
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s;
+    backdrop-filter: blur(5px);
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+.filter-select[multiple] {
+    height: 120px;
+    overflow-y: auto;
+}
+
+.filter-select option {
+    padding: 10px;
+    background: rgba(44, 62, 80, 0.9);
+    color: white;
+    transition: background 0.2s;
+}
+
+.filter-select option:hover {
+    background: #3498db;
+}
+
+.filter-select option:checked {
+    background: #2ecc71;
+    color: white;
+}
+
+/* ========== ИНФОРМАЦИЯ О ТОЧКЕ ========== */
+.point-info {
+    background: linear-gradient(135deg, rgba(52, 152, 219, 0.1) 0%, rgba(41, 128, 185, 0.1) 100%);
+    margin: 0 25px 25px;
+    padding: 25px;
+    border-radius: 12px;
+    border-top: 4px solid #3498db;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.point-info h4 {
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: white;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.point-info h4 i {
+    color: #2ecc71;
+}
+
+/* ========== КАРТА ========== */
+.map-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* ========== ПОИСК ========== */
+.search-box {
+    position: absolute;
+    top: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    width: 550px;
+    max-width: 90%;
+    display: flex;
+    gap: 8px;
+    animation: slideDown 0.5s ease-out;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -20px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+.search-box input {
+    flex: 1;
+    padding: 16px 25px;
+    border: none;
+    border-radius: 30px;
+    background: rgba(255, 255, 255, 0.95);
+    color: #2c3e50;
+    font-size: 15px;
+    font-weight: 500;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    outline: none;
+    transition: all 0.3s;
+    backdrop-filter: blur(10px);
+}
+
+.search-box input:focus {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    background: white;
+}
+
+.search-box input::placeholder {
+    color: #95a5a6;
+}
+
+.search-box button {
+    width: 60px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+    box-shadow: 0 8px 25px rgba(52, 152, 219, 0.4);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.search-box button:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #3498db 100%);
+    transform: scale(1.08) rotate(5deg);
+    box-shadow: 0 12px 30px rgba(52, 152, 219, 0.6);
+}
+
+/* ========== ЛЕГЕНДА ========== */
+.legend {
+    position: absolute;
+    bottom: 25px;
+    left: 25px;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.95);
+    color: #2c3e50;
+    border-radius: 15px;
+    padding: 20px;
+    width: 220px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.legend h5 {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #2c3e50;
+    font-size: 16px;
+    font-weight: 600;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 8px;
+}
+
+.legend h5 i {
+    color: #3498db;
+}
+
+/* ========== МОДАЛЬНОЕ ОКНО ========== */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.modal-content {
+    background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
+    padding: 40px;
+    border-radius: 20px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-content h3 {
+    margin-bottom: 20px;
+    color: white;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.modal-content p {
+    margin-bottom: 30px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+.modal-content .btn {
+    min-width: 120px;
+}
+
+/* ========== УВЕДОМЛЕНИЯ ========== */
+.notification {
+    position: fixed;
+    top: 25px;
+    right: 25px;
+    z-index: 3000;
+    animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+.notification div {
+    padding: 18px 25px;
+    background: linear-gradient(135deg, var(--notification-color, #3498db) 0%, var(--notification-color-dark, #2980b9) 100%);
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 300px;
+    max-width: 400px;
+}
+
+.notification i {
+    font-size: 20px;
+}
+
+.notification.success div {
+    --notification-color: #2ecc71;
+    --notification-color-dark: #27ae60;
+}
+
+.notification.error div {
+    --notification-color: #e74c3c;
+    --notification-color-dark: #c0392b;
+}
+
+.notification.warning div {
+    --notification-color: #f39c12;
+    --notification-color-dark: #d68910;
+}
+
+.notification.info div {
+    --notification-color: #3498db;
+    --notification-color-dark: #2980b9;
+}
+
+/* ========== СКРОЛЛБАР ========== */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #3498db 0%, #2ecc71 100%);
+    border-radius: 5px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #2980b9 0%, #27ae60 100%);
+}
+
+/* ========== АДАПТИВНОСТЬ ========== */
+@media (max-width: 1200px) {
+    .sidebar {
+        width: 350px;
+    }
+    
+    .search-box {
+        width: 500px;
+    }
+}
+
+@media (max-width: 992px) {
+    .sidebar {
+        width: 320px;
+    }
+    
+    .stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .controls {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    
+    .sidebar {
+        width: 100%;
+        height: 60vh;
+        order: 2;
+    }
+    
+    .map-container {
+        height: 40vh;
+        order: 1;
+    }
+    
+    .search-box {
+        top: 15px;
+        width: 90%;
+    }
+    
+    .legend {
+        bottom: 15px;
+        left: 15px;
+        width: 180px;
+        padding: 15px;
+    }
+    
+    .filters {
+        margin: 15px;
+        padding: 20px;
+    }
+    
+    .geocoding-controls {
+        margin: 15px;
+        padding: 15px;
+    }
+    
+    .point-info {
+        margin: 15px;
+        padding: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header {
+        padding: 20px;
+    }
+    
+    .header h1 {
+        font-size: 22px;
+    }
+    
+    .search-box input {
+        padding: 14px 20px;
+        font-size: 14px;
+    }
+    
+    .search-box button {
+        width: 50px;
+    }
+    
+    .legend {
+        width: 160px;
+        padding: 12px;
+    }
+    
+    .modal-content {
+        padding: 25px;
+        width: 95%;
+    }
+    
+    .notification div {
+        min-width: 250px;
+        padding: 15px 20px;
+    }
+}
+
+/* ========== АНИМАЦИИ ДЛЯ ГЕОКОДИРОВАНИЯ ========== */
+.geocoding-progress {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    animation: slideInUp 0.3s ease-out;
+    border-left: 4px solid #3498db;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.geocoding-progress .progress-bar {
+    height: 6px;
+    background: #ecf0f1;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.geocoding-progress .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #3498db);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+/* ========== СТИЛИ ДЛЯ МАРКЕРОВ ========== */
+.custom-marker {
+    transition: all 0.3s ease;
+}
+
+.custom-marker:hover {
+    transform: scale(1.2);
+    z-index: 1000 !important;
+}
+
+.custom-cluster {
+    transition: all 0.3s ease;
+}
+
+.custom-cluster:hover {
+    transform: scale(1.1);
+}
+
+/* ========== ИКОНКИ ИСТОЧНИКОВ ГЕОКОДИРОВАНИЯ ========== */
+.source-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: white;
+    font-weight: bold;
+}
+
+.source-yandex {
+    background: #ffcc00;
+}
+
+.source-osm {
+    background: #7bc96f;
+}
+
+/* ========== ТЕМНАЯ ТЕМА ДЛЯ КАРТЫ ========== */
+.leaflet-container {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* ========== ДОПОЛНИТЕЛЬНЫЕ ЭФФЕКТЫ ========== */
+.glow {
+    animation: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+    from {
+        box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+    }
+    to {
+        box-shadow: 0 0 20px rgba(52, 152, 219, 0.8), 0 0 30px rgba(52, 152, 219, 0.4);
+    }
+}
+
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #2ecc71;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ========== ПРОГРЕСС БАР ДЛЯ ЗАГРУЗКИ ========== */
+.progress-container {
+    width: 100%;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #3498db);
+    border-radius: 2px;
+    transition: width 0.3s ease;
 }
