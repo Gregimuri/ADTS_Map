@@ -254,24 +254,93 @@ function parseCSV(csvText) {
         const lines = csvText.split('\n').filter(line => line.trim() !== '');
         const result = [];
         
-        for (const line of lines) {
-            const row = line.split(',').map(cell => {
-                let cleanCell = cell.trim();
-                if (cleanCell.startsWith('"') && cleanCell.endsWith('"')) {
-                    cleanCell = cleanCell.substring(1, cleanCell.length - 1);
+        for (let line of lines) {
+            const row = [];
+            let current = '';
+            let inQuotes = false;
+            let quoteChar = '';
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = i + 1 < line.length ? line[i + 1] : '';
+                
+                // Начало кавычек
+                if ((char === '"' || char === "'") && !inQuotes) {
+                    inQuotes = true;
+                    quoteChar = char;
+                    continue;
                 }
-                return cleanCell;
+                
+                // Конец кавычек
+                if (char === quoteChar && inQuotes) {
+                    // Проверяем двойные кавычки (экранирование)
+                    if (nextChar === quoteChar) {
+                        current += char;
+                        i++; // Пропускаем следующую кавычку
+                        continue;
+                    }
+                    inQuotes = false;
+                    quoteChar = '';
+                    continue;
+                }
+                
+                // Разделитель вне кавычек
+                if (char === ',' && !inQuotes) {
+                    row.push(current.trim());
+                    current = '';
+                    continue;
+                }
+                
+                // Добавляем символ
+                current += char;
+            }
+            
+            // Добавляем последнюю ячейку
+            row.push(current.trim());
+            
+            // Убираем кавычки из ячеек
+            const cleanedRow = row.map(cell => {
+                let cleaned = cell;
+                // Убираем внешние кавычки если они есть
+                if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
+                    (cleaned.startsWith("'") && cleaned.endsWith("'"))) {
+                    cleaned = cleaned.substring(1, cleaned.length - 1);
+                }
+                // Заменяем двойные кавычки на одинарные
+                cleaned = cleaned.replace(/""/g, '"');
+                return cleaned;
             });
             
-            if (row.some(cell => cell.trim() !== '')) {
-                result.push(row);
+            // Добавляем только если есть хоть одна непустая ячейка
+            if (cleanedRow.some(cell => cell.trim() !== '')) {
+                result.push(cleanedRow);
             }
         }
         
+        console.log(`Парсинг CSV: ${result.length} строк, ${result[0]?.length || 0} колонок`);
         return result;
+        
     } catch (error) {
         console.error('Ошибка парсинга CSV:', error);
-        return [];
+        
+        // Пробуем простой парсинг как запасной вариант
+        try {
+            const simpleResult = csvText.split('\n')
+                .filter(line => line.trim() !== '')
+                .map(line => line.split(',').map(cell => {
+                    let clean = cell.trim();
+                    if (clean.startsWith('"') && clean.endsWith('"')) {
+                        clean = clean.substring(1, clean.length - 1);
+                    }
+                    return clean;
+                }));
+            
+            console.log(`Использован простой парсинг: ${simpleResult.length} строк`);
+            return simpleResult;
+        } catch (e) {
+            console.error('Простейший парсинг тоже не удался:', e);
+            return [];
+        }
     }
 }
 
@@ -287,104 +356,120 @@ function processData(rows) {
     const points = [];
     const headers = rows[0].map(h => h.toString().trim());
     
-    console.log('Заголовки таблицы:', headers);
+    console.log('Заголовки таблицы (с индексами):');
+    headers.forEach((h, i) => console.log(`  [${i}] "${h}"`));
     
-    // Находим индексы колонок
     const colIndices = findColumnIndices(headers);
-    console.log('Индексы колонок:', colIndices);
+    
+    // Проверим первые 3 строки для отладки
+    console.log('\nПервые 3 строки данных для отладки:');
+    for (let i = 1; i < Math.min(4, rows.length); i++) {
+        console.log(`Строка ${i}:`);
+        rows[i].forEach((cell, j) => {
+            console.log(`  [${j}] "${cell}"`);
+        });
+    }
     
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         
-        // Пропускаем пустые строки
-        if (!row || row.length === 0 || row.every(cell => !cell || cell.toString().trim() === '')) {
+        if (!row || row.length === 0) {
             continue;
         }
         
-        // Создаем точку
+        // Создаем точку с данными из правильных колонок
         const point = {
             id: `point_${i}_${Date.now()}`,
             sheetRow: i + 1,
-            // Инициализируем все поля пустыми строками
-            name: '',
-            region: '',
-            address: '',
-            status: '',
-            manager: '',
-            contractor: ''
+            name: row[colIndices.name] ? row[colIndices.name].toString().trim() : '',
+            region: row[colIndices.region] ? row[colIndices.region].toString().trim() : '',
+            address: row[colIndices.address] ? row[colIndices.address].toString().trim() : '',
+            status: row[colIndices.status] ? row[colIndices.status].toString().trim() : '',
+            manager: row[colIndices.manager] ? row[colIndices.manager].toString().trim() : '',
+            contractor: row[colIndices.contractor] ? row[colIndices.contractor].toString().trim() : ''
         };
         
-        // Заполняем данные из соответствующих колонок
-        Object.keys(colIndices).forEach(key => {
-            const index = colIndices[key];
-            if (index !== -1 && index < row.length && row[index]) {
-                const value = row[index].toString().trim();
-                if (value) {
-                    point[key] = value;
-                }
-            }
-        });
+        // Отладочный вывод для первых точек
+        if (i <= 3) {
+            console.log(`\nОбработка точки ${i}:`);
+            console.log('  Извлеченные данные:', {
+                name: point.name,
+                region: point.region,
+                address: point.address?.substring(0, 50) + '...',
+                status: point.status,
+                manager: point.manager,
+                contractor: point.contractor
+            });
+        }
         
-        console.log(`Строка ${i}:`, {
-            name: point.name,
-            region: point.region,
-            address: point.address,
-            status: point.status
-        });
-        
-        // Если нет названия, но есть адрес - используем часть адреса как название
+        // Если название пустое, но есть адрес - создаем название из адреса
         if (!point.name || point.name.trim() === '') {
             if (point.address) {
-                // Берем первую часть адреса как название
-                const firstPart = point.address.split(',')[0];
-                point.name = firstPart.trim().substring(0, 30) + (firstPart.length > 30 ? '...' : '');
+                // Берем первую часть адреса до запятой
+                const nameParts = point.address.split(',');
+                point.name = nameParts[0].trim();
+                if (point.name.length > 30) {
+                    point.name = point.name.substring(0, 27) + '...';
+                }
                 console.log(`  Создано название из адреса: "${point.name}"`);
             } else if (point.region) {
-                point.name = point.region + ' - Точка ' + i;
+                point.name = `Точка в ${point.region}`;
             } else {
-                point.name = 'Точка ' + i;
+                point.name = `Точка ${i}`;
             }
         }
         
-        // Проверяем, не перепутаны ли статус и регион
-        // Если в статусе есть "обл", "край", "респ" - это скорее всего регион
-        if (point.status && (point.status.toLowerCase().includes('обл') || 
-                             point.status.toLowerCase().includes('край') || 
-                             point.status.toLowerCase().includes('респ'))) {
-            console.log(`  ⚠️  Возможно статус и регион перепутаны: статус="${point.status}", регион="${point.region}"`);
-            // Меняем местами если регион пустой
+        // Очищаем адрес от лишних символов
+        if (point.address) {
+            point.address = point.address
+                .replace(/^\d{6},?\s*/, '') // Удаляем почтовый индекс в начале
+                .replace(/\s+/g, ' ')       // Убираем лишние пробелы
+                .trim();
+        }
+        
+        // Проверяем, не перепутаны ли поля
+        // Если в "статусе" есть слова, характерные для регионов - это ошибка
+        const regionKeywords = ['обл', 'край', 'респ', 'область', 'автономный', 'округ'];
+        if (point.status && regionKeywords.some(keyword => 
+            point.status.toLowerCase().includes(keyword.toLowerCase()))) {
+            console.log(`  ⚠️  Возможно ошибка: статус содержит название региона: "${point.status}"`);
+            // Если регион пустой, а статус похож на регион - меняем местами
             if (!point.region || point.region.trim() === '') {
-                const temp = point.status;
+                console.log(`  ↻ Меняю местами: статус -> регион`);
+                point.region = point.status;
                 point.status = '';
-                point.region = temp;
-                console.log(`  ↻ Исправлено: регион="${point.region}", статус="${point.status}"`);
             }
         }
         
-        // Если адрес пустой, но есть регион - создаем адрес
-        if (!point.address || point.address.trim() === '') {
-            if (point.region && point.name) {
-                point.address = `${point.region}, ${point.name}`;
-            } else if (point.region) {
-                point.address = point.region;
-            } else if (point.name) {
-                point.address = point.name;
+        // Если статус пустой, а в адресе есть "сдан" - берем оттуда
+        if (!point.status || point.status.trim() === '') {
+            if (point.address && point.address.toLowerCase().includes('сдан')) {
+                point.status = 'сдан';
+                console.log(`  Найден статус в адресе: "${point.status}"`);
+            } else if (point.region && point.region.toLowerCase().includes('сдан')) {
+                point.status = 'сдан';
+                console.log(`  Найден статус в регионе: "${point.status}"`);
+            } else {
+                point.status = 'Не указан';
             }
         }
         
-        // Добавляем точку если есть хоть какие-то данные
-        if (point.name || point.address || point.region) {
-            points.push(point);
-        }
+        // Добавляем точку
+        points.push(point);
     }
     
-    console.log(`Обработано точек: ${points.length}`);
+    console.log(`\nОбработано точек: ${points.length}`);
     
-    // Выведем примеры первых 3 точек для отладки
+    // Покажем примеры обработанных точек
     if (points.length > 0) {
         console.log('Примеры обработанных точек:');
-        points.slice(0, 3).forEach((p, i) => {
-            console.log(`  ${i+1}. Название: "${p.name}", Регион: "${p.region}", Адрес: "${p.address?.substring(0, 50)}...", Статус: "${p.status}"`);
+        points.slice(0, 3).forEach((p, idx) => {
+            console.log(`  ${idx+1}. "${p.name}"`);
+            console.log(`     Регион: "${p.region}"`);
+            console.log(`     Адрес: "${p.address?.substring(0, 60)}..."`);
+            console.log(`     Статус: "${p.status}"`);
+            console.log(`     Менеджер: "${p.manager}"`);
+            console.log(`     Подрядчик: "${p.contractor}"`);
         });
     }
     
@@ -392,116 +477,49 @@ function processData(rows) {
 }
 
 function findColumnIndices(headers) {
-    const indices = {
-        name: -1,
-        region: -1,
-        address: -1,
-        status: -1,
-        manager: -1,
-        contractor: -1
-    };
-    
     console.log('Определяю колонки для заголовков:', headers);
     
-    // Сначала создадим массивы ключевых слов для каждого типа колонки
-    const patterns = {
-        name: ['название тт', 'название', 'магазин', 'точка', 'торговая точка', 'тт'],
-        region: ['регион', 'область', 'район', 'город'],
-        address: ['адрес', 'местоположение', 'адресс', 'локация', 'место'],
-        status: ['статус тт', 'статус', 'состояние', 'статус точки'],
-        manager: ['менеджер фио', 'менеджер', 'ответственный', 'фио менеджера'],
-        contractor: ['подрядчик фио', 'подрядчик', 'исполнитель', 'фио подрядчика']
+    // Приведем все заголовки к нижнему регистру для сравнения
+    const headersLower = headers.map(h => h.toString().toLowerCase().trim());
+    
+    // Простая прямая проверка по известным заголовкам из вашей таблицы
+    const indices = {
+        name: headersLower.findIndex(h => h.includes('название тт') || h.includes('название')),
+        region: headersLower.findIndex(h => h.includes('регион')),
+        address: headersLower.findIndex(h => h.includes('адрес')),
+        status: headersLower.findIndex(h => h.includes('статус тт') || h.includes('статус')),
+        manager: headersLower.findIndex(h => h.includes('менеджер фио') || h.includes('менеджер')),
+        contractor: headersLower.findIndex(h => h.includes('подрядчик фио') || h.includes('подрядчик'))
     };
     
-    // Ищем каждую колонку
-    headers.forEach((header, index) => {
-        if (!header) return;
-        
-        const headerLower = header.toString().toLowerCase().trim();
-        console.log(`  Проверяю заголовок [${index}]: "${header}" -> "${headerLower}"`);
-        
-        // Название
-        if (indices.name === -1) {
-            for (const pattern of patterns.name) {
-                if (headerLower === pattern || headerLower.includes(pattern)) {
-                    indices.name = index;
-                    console.log(`    ✓ Найдено название в колонке ${index}`);
-                    break;
-                }
-            }
-        }
-        
-        // Регион
-        if (indices.region === -1) {
-            for (const pattern of patterns.region) {
-                if (headerLower === pattern || headerLower.includes(pattern)) {
-                    indices.region = index;
-                    console.log(`    ✓ Найдено регион в колонке ${index}`);
-                    break;
-                }
-            }
-        }
-        
-        // Адрес
-        if (indices.address === -1) {
-            for (const pattern of patterns.address) {
-                if (headerLower === pattern || headerLower.includes(pattern)) {
-                    indices.address = index;
-                    console.log(`    ✓ Найдено адрес в колонке ${index}`);
-                    break;
-                }
-            }
-        }
-        
-        // Статус
-        if (indices.status === -1) {
-            for (const pattern of patterns.status) {
-                if (headerLower === pattern || headerLower.includes(pattern)) {
-                    indices.status = index;
-                    console.log(`    ✓ Найдено статус в колонке ${index}`);
-                    break;
-                }
-            }
-        }
-        
-        // Менеджер
-        if (indices.manager === -1) {
-            for (const pattern of patterns.manager) {
-                if (headerLower === pattern || headerLower.includes(pattern)) {
-                    indices.manager = index;
-                    console.log(`    ✓ Найдено менеджер в колонке ${index}`);
-                    break;
-                }
-            }
-        }
-        
-        // Подрядчик
-        if (indices.contractor === -1) {
-            for (const pattern of patterns.contractor) {
-                if (headerLower === pattern || headerLower.includes(pattern)) {
-                    indices.contractor = index;
-                    console.log(`    ✓ Найдено подрядчик в колонке ${index}`);
-                    break;
-                }
-            }
-        }
-    });
+    // Если не нашли стандартные названия, ищем альтернативные
+    if (indices.name === -1) {
+        // Ищем первую колонку как название
+        indices.name = 0;
+        console.log('  ⚠️  Название: использована первая колонка');
+    }
     
-    // Если какие-то колонки не найдены, попробуем найти по другим признакам
-    if (indices.address === -1) {
-        // Ищем колонку с длинным текстом (скорее всего адрес)
+    if (indices.region === -1) {
+        // Ищем колонку с короткими значениями (скорее всего регион)
         for (let i = 0; i < headers.length; i++) {
-            if (headers[i] && headers[i].length > 20 && indices.address === -1) {
-                indices.address = i;
-                console.log(`    ⚠️ Адрес предположительно в колонке ${i} (длинный текст)`);
+            if (headers[i] && headers[i].length < 30 && !headers[i].toLowerCase().includes('адрес')) {
+                indices.region = i;
+                console.log(`  ⚠️  Регион: предположительно колонка ${i} ("${headers[i]}")`);
+                break;
             }
         }
     }
     
-    if (indices.name === -1 && indices.address !== -1) {
-        // Если не нашли название, но нашли адрес, предположим что название в первой колонке
-        indices.name = 0;
-        console.log(`    ⚠️ Название предположительно в колонке 0 (первая колонка)`);
+    if (indices.address === -1) {
+        // Ищем колонку с самыми длинными значениями (скорее всего адрес)
+        indices.address = headers.length > 2 ? 2 : 1; // По умолчанию третья колонка
+        console.log(`  ⚠️  Адрес: предположительно колонка ${indices.address}`);
+    }
+    
+    if (indices.status === -1) {
+        // Ищем колонку с короткими статусами
+        indices.status = headers.length > 3 ? 3 : 2;
+        console.log(`  ⚠️  Статус: предположительно колонка ${indices.status}`);
     }
     
     console.log('Найденные индексы колонок:', indices);
@@ -1686,4 +1704,5 @@ window.closeModal = closeModal;
 window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
+
 
