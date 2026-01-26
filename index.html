@@ -243,33 +243,37 @@
     <script src="app.js"></script>
     
     <script>
-        // Управление индикатором геокодирования
-        function updateGeocodingIndicator(active, queueSize = 0) {
-            const indicator = document.getElementById('geocoding-indicator');
-            const textElement = document.getElementById('geocoding-indicator-text');
-            
-            if (!indicator || !textElement) return;
-            
-            if (active || queueSize > 0) {
-                indicator.style.display = 'flex';
-                if (active) {
-                    textElement.textContent = 'Геокодирование...';
-                } else {
-                    textElement.textContent = `В очереди: ${queueSize}`;
-                }
-            } else {
-                indicator.style.display = 'none';
-            }
-        }
+    // Управление индикатором геокодирования
+    function updateGeocodingIndicator(active, queueSize = 0) {
+        const indicator = document.getElementById('geocoding-indicator');
+        const textElement = document.getElementById('geocoding-indicator-text');
         
-        // Мониторим очередь геокодирования
-        setInterval(() => {
-            if (window.geocodingSystem) {
-                const queueSize = window.geocodingSystem.queue.length;
-                const isActive = window.geocodingSystem.processing;
-                updateGeocodingIndicator(isActive, queueSize);
+        if (!indicator || !textElement) return;
+        
+        if (active || queueSize > 0) {
+            indicator.style.display = 'flex';
+            if (active) {
+                textElement.textContent = `Геокодирование... (${queueSize} в очереди)`;
+            } else {
+                textElement.textContent = `В очереди: ${queueSize}`;
             }
-        }, 1000);
-    </script>
+        } else {
+            indicator.style.display = 'none';
+        }
+    }
+    
+    // Мониторим очередь геокодирования
+    setInterval(() => {
+        if (window.geocodingSystem) {
+            const queueSize = window.geocodingSystem.queue.length;
+            const isActive = window.geocodingSystem.processing;
+            updateGeocodingIndicator(isActive, queueSize);
+        }
+    }, 1000);
+    
+    // Экспортируем функцию для использования в app.js
+    window.updateGeocodingIndicator = updateGeocodingIndicator;
+</script>
 </body>
 </html>
+
