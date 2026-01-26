@@ -246,58 +246,80 @@ class GeocodingSystem {
     
     // ГЕОКОДИРОВАНИЕ ЧЕРЕЗ ЯНДЕКС
     async geocodeYandex(address, region = '') {
-        if (!CONFIG.GEOCODING?.enabled) return null;
+    if (!CONFIG.GEOCODING?.enabled) return null;
+    
+    try {
+        // Упрощаем адрес
+        let query = '';
         
-        try {
-            const normalized = this.normalizeRussianAddress(address, region);
+        // Берем только город, улицу и номер дома
+        const parts = address.split(',');
+        if (parts.length >= 2) {
+            // Берем последние 2-3 части
+            query = parts.slice(-3).join(',').trim();
+        } else {
+            query = address;
+        }
+        
+        // Убираем "Россия" и лишние детали
+        query = query.replace(/,\s*Россия$/i, '')
+                     .replace(/\([^)]*\)/g, '')
+                     .replace(/\s+/g, ' ')
+                     .trim();
+        
+        // Если слишком длинный, сокращаем
+        if (query.length > 100) {
+            const cityMatch = query.match(/(г\.|город)\s+[^,]+/i);
+            const streetMatch = query.match(/(ул\.|улица)\s+[^,]+/i);
+            const houseMatch = query.match(/\d+/);
             
-            // Ждем перед запросом
-            await new Promise(resolve => 
-                setTimeout(resolve, CONFIG.GEOCODING.delays?.yandex || 300));
-            
-            const encoded = encodeURIComponent(normalized);
-            const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
-            
-            console.log(`📍 Яндекс: ${normalized.substring(0, 60)}...`);
-            
-            const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'TTMapApp/1.0',
-                    'Accept': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                
-                if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
-                    const pos = data.response.GeoObjectCollection.featureMember[0]
-                        .GeoObject.Point.pos.split(' ');
-                    
-                    const lon = parseFloat(pos[0]);
-                    const lat = parseFloat(pos[1]);
-                    
-                    this.stats.yandex++;
-                    console.log(`✅ Яндекс нашел: ${lat}, ${lon}`);
-                    
-                    return {
-                        lat: lat,
-                        lng: lon,
-                        source: 'yandex',
-                        isExact: true,
-                        normalized: normalized
-                    };
-                }
-            }
-            
-            console.log(`❌ Яндекс не нашел: ${normalized.substring(0, 50)}...`);
-            return null;
-            
-        } catch (error) {
-            console.warn('Ошибка геокодирования Яндекс:', error);
+            query = '';
+            if (cityMatch) query += cityMatch[0] + ', ';
+            if (streetMatch) query += streetMatch[0];
+            if (houseMatch) query += ' ' + houseMatch[0];
+        }
+        
+        if (!query || query.length < 3) {
             return null;
         }
+        
+        // Ждем
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const encoded = encodeURIComponent(query);
+        const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
+        
+        console.log(`📍 Яндекс (фикс): ${query}`);
+        
+        const response = await fetch(url);
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
+                const pos = data.response.GeoObjectCollection.featureMember[0]
+                    .GeoObject.Point.pos.split(' ');
+                
+                this.stats.yandex++;
+                console.log(`✅ Яндекс нашел: ${pos[1]}, ${pos[0]}`);
+                
+                return {
+                    lat: parseFloat(pos[1]),
+                    lng: parseFloat(pos[0]),
+                    source: 'yandex',
+                    isExact: true,
+                    normalized: query
+                };
+            }
+        }
+        
+        return null;
+        
+    } catch (error) {
+        console.warn('Ошибка Яндекс (фикс):', error);
+        return null;
     }
+}
     
     // ГЕОКОДИРОВАНИЕ ЧЕРЕЗ NOMINATIM (OpenStreetMap)
     async geocodeNominatim(address, region = '') {
@@ -2051,3 +2073,4 @@ window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
 window.testGeocoding = testGeocoding;
+
