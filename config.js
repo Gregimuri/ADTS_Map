@@ -42,23 +42,29 @@ const CONFIG = {
         interval: 300000 // 5 минут
     },
     
-    // Настройки геокодирования
-    GEOCODING: {
-        enabled: true,
-        // Приоритеты геокодирования: Яндекс → OSM
-        providers: ['yandex', 'nominatim'],
-        // Кэширование координат в localStorage (дней)
-        cacheDays: 30,
-        // Задержка между запросами (мс)
-        delay: {
-            yandex: 300,
-            nominatim: 1000
-        },
-        // Максимальное количество одновременных запросов
-        maxConcurrent: 3,
-        // Автоматически обновлять координаты при загрузке
-        autoUpdate: true,
-        // Показывать приблизительные координаты до уточнения
-        showApproximate: true
-    }
+   // Настройки геокодирования
+GEOCODING: {
+    enabled: true,
+    // Приоритеты геокодирования
+    providers: ['yandex', 'nominatim', 'google'],
+    // Яндекс API ключ (получить на https://developer.tech.yandex.ru/)
+    yandexApiKey: '',
+    // Google API ключ (опционально)
+    googleApiKey: '',
+    // Кэширование координат в localStorage (дней)
+    cacheDays: 30,
+    // Задержка между запросами (мс)
+    delay: {
+        yandex: 300,
+        nominatim: 1000,
+        google: 1000
+    },
+    // Максимальное количество одновременных запросов
+    maxConcurrent: 3,
+    // Автоматически обновлять координаты при загрузке
+    autoUpdate: true,
+    // Показывать приблизительные координаты до уточнения
+    showApproximate: true
+}
 };
+
