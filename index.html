@@ -59,6 +59,37 @@
             50% { opacity: 0.5; transform: scale(1.2); }
             100% { opacity: 1; transform: scale(1); }
         }
+        
+        /* Стиль для уведомлений */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            background: #3498db;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 3000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+            max-width: 400px;
+            word-wrap: break-word;
+        }
+        
+        .notification.success {
+            background: #2ecc71;
+        }
+        
+        .notification.error {
+            background: #e74c3c;
+        }
+        
+        .notification.warning {
+            background: #f39c12;
+        }
     </style>
 </head>
 <body>
@@ -118,7 +149,7 @@
             </div>
             
             <!-- Геокодирование -->
-            <div class="geocoding-controls" style="padding: 0 20px 15px;">
+            <div class="geocoding-controls">
                 <h4 style="color: white; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-search-location"></i> Геокодирование
                 </h4>
@@ -241,30 +272,5 @@
     
     <!-- Приложение -->
     <script src="app.js"></script>
-    
-    <script>
-        // Управление индикатором геокодирования
-        function updateGeocodingIndicator(active, queueSize = 0) {
-            const indicator = document.getElementById('geocoding-indicator');
-            if (!indicator) return;
-            
-            if (active || queueSize > 0) {
-                indicator.style.display = 'flex';
-                indicator.innerHTML = `
-                    <div class="pulse"></div>
-                    <span>${active ? 'Обработка...' : `В очереди: ${queueSize}`}</span>
-                `;
-            } else {
-                indicator.style.display = 'none';
-            }
-        }
-        
-        // Монетируем глобальную переменную для обновления индикатора
-        setInterval(() => {
-            const queueSize = window.geocodingQueue ? window.geocodingQueue.length : 0;
-            const isActive = window.isGeocodingActive || false;
-            updateGeocodingIndicator(isActive, queueSize);
-        }, 1000);
-    </script>
 </body>
 </html>
