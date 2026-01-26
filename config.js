@@ -62,4 +62,3 @@ const CONFIG = {
         showApproximate: true
     }
 };
-
