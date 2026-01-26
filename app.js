@@ -69,117 +69,122 @@ class GeocodingSystem {
     
     // НОРМАЛИЗАЦИЯ АДРЕСА ДЛЯ РОССИЙСКОГО ФОРМАТА
     normalizeRussianAddress(address, region = '') {
-        if (!address) return '';
+    if (!address) return '';
+    
+    let normalized = address.toString().trim();
+    
+    console.log(`🔍 Исходный адрес: ${normalized}`);
+    
+    // 1. Удаляем почтовый индекс
+    normalized = normalized.replace(/^\d{6},?\s*/, '');
+    normalized = normalized.replace(/,\s*\d{6}$/, '');
+    
+    // 2. Удаляем дублирование региона
+    if (region) {
+        const regionPattern = new RegExp(`^${region}\\s*[/,–-]\\s*`, 'i');
+        normalized = normalized.replace(regionPattern, '');
+        normalized = normalized.replace(new RegExp(`^${region},?\\s*`, 'i'), '');
+    }
+    
+    // 3. Удаляем текст в скобках
+    normalized = normalized.replace(/\s*\([^)]*\)/g, '');
+    
+    // 4. Удаляем специальные пометки
+    const stopWords = [
+        'нас. пункт', 'населенный пункт', 'нас.пункт', 'Нас.пункт',
+        'торговая точка', 'торг точка', 'тт', 'магазин',
+        'здание', 'помещение', 'пом.', 'владение', 'влад.',
+        'корп.', 'стр.', 'строение', 'литер', 'лит.',
+        'дом №', 'дом№', '№', 'зд.', 'помещ.', 'влд.'
+    ];
+    
+    stopWords.forEach(word => {
+        const regex = new RegExp(`\\s*${word}\\s*`, 'gi');
+        normalized = normalized.replace(regex, ' ');
+    });
+    
+    // 5. Упрощаем для Яндекса - только самое важное
+    // Яндекс не любит длинные адреса с деталями
+    
+    // 6. Убираем "Россия" - Яндекс и так ищет в России
+    normalized = normalized.replace(/,\s*Россия$/i, '');
+    normalized = normalized.replace(/,\s*РФ$/i, '');
+    
+    // 7. Стандартизируем сокращения (упрощенная версия)
+    const replacements = [
+        ['улица', 'ул.'],
+        ['проспект', 'пр-кт.'],
+        ['переулок', 'пер.'],
+        ['бульвар', 'б-р.'],
+        ['шоссе', 'ш.'],
+        ['площадь', 'пл.'],
+        ['набережная', 'наб.'],
+        ['село', 'с.'],
+        ['деревня', 'д.'],
+        ['поселок', 'п.'],
+        ['посёлок', 'п.'],
+        ['город', 'г.'],
+        ['район', 'р-н'],
+        ['область', 'обл.'],
+        ['край', 'край'],
+        ['республика', 'респ.']
+    ];
+    
+    replacements.forEach(([from, to]) => {
+        const regex = new RegExp(`\\b${from}\\b`, 'gi');
+        normalized = normalized.replace(regex, to);
+    });
+    
+    // 8. Убираем лишние пробелы и запятые
+    normalized = normalized.replace(/\s+/g, ' ');
+    normalized = normalized.replace(/,+/g, ',');
+    normalized = normalized.replace(/\s*,\s*/g, ', ');
+    normalized = normalized.trim();
+    
+    // 9. Убираем запятую в начале и конце
+    normalized = normalized.replace(/^,\s*/, '');
+    normalized = normalized.replace(/,\s*$/, '');
+    
+    // 10. Для Яндекса делаем адрес короче - оставляем только 2-3 ключевых элемента
+    const parts = normalized.split(',').map(p => p.trim()).filter(p => p);
+    
+    if (parts.length > 3) {
+        // Берем: город, улица, дом (если есть)
+        const simplified = [];
         
-        let normalized = address.toString().trim();
-        
-        // 1. Удаляем почтовый индекс в начале и конце
-        normalized = normalized.replace(/^\d{6},?\s*/, '');
-        normalized = normalized.replace(/,\s*\d{6}$/, '');
-        
-        // 2. Удаляем дублирование региона в начале адреса
-        if (region) {
-            const regionPattern = new RegExp(`^${region}\\s*[/,–-]\\s*`, 'i');
-            normalized = normalized.replace(regionPattern, '');
-            normalized = normalized.replace(new RegExp(`^${region},?\\s*`, 'i'), '');
+        // Ищем город
+        const cityIndex = parts.findIndex(p => p.match(/(г\.|с\.|п\.|пгт\.)/));
+        if (cityIndex !== -1) {
+            simplified.push(parts[cityIndex]);
+        } else if (parts.length > 0) {
+            simplified.push(parts[0]); // Первый элемент как город
         }
         
-        // 3. Удаляем текст в скобках (Нас.пункт и т.д.)
-        normalized = normalized.replace(/\s*\([^)]*\)/g, '');
-        normalized = normalized.replace(/\([^)]*\)/g, '');
-        
-        // 4. Удаляем специальные пометки для торговых точек
-        const ttMarkers = [
-            'нас. пункт', 'населенный пункт', 'нас.пункт', 'Нас.пункт',
-            'торговая точка', 'торг точка', 'тт', 'магазин',
-            'здание', 'помещение', 'пом.', 'владение', 'влад.',
-            'корп.', 'стр.', 'строение', 'литер', 'лит.'
-        ];
-        
-        ttMarkers.forEach(marker => {
-            const regex = new RegExp(`\\s*${marker}\\s*[,:]?\\s*`, 'gi');
-            normalized = normalized.replace(regex, ', ');
-        });
-        
-        // 5. Исправляем опечатки и некорректные адреса
-        const corrections = [
-            ['крайул\\.', 'край, ул.'],
-            ['облул\\.', 'обл, ул.'],
-            ['ул\\.\\s+', 'ул. '],
-            ['пр-кт\\.\\s+', 'пр-кт. '],
-            ['пер\\.\\s+', 'пер. '],
-            ['\\(с\\)', 'с.'],
-            ['\\s+с\\)', ' с.'],
-            ['пгт', 'пгт.'],
-            ['р-н', 'район'],
-            ['Алтайский край /', ''],
-            ['Архангельская область /', '']
-        ];
-        
-        corrections.forEach(([from, to]) => {
-            normalized = normalized.replace(new RegExp(from, 'gi'), to);
-        });
-        
-        // 6. Стандартизируем сокращения
-        const replacements = {
-            'республика': 'респ',
-            'область': 'обл',
-            'автономный округ': 'ао',
-            'край': 'край',
-            'город': 'г',
-            'поселок': 'п',
-            'село': 'с',
-            'деревня': 'д',
-            'станица': 'ст-ца',
-            'улица': 'ул',
-            'проспект': 'пр-кт',
-            'переулок': 'пер',
-            'бульвар': 'б-р',
-            'шоссе': 'ш',
-            'набережная': 'наб',
-            'площадь': 'пл',
-            'аллея': 'ал',
-            'микрорайон': 'мкр',
-            'квартал': 'кв-л',
-            'дом': 'д',
-            'корпус': 'к',
-            'строение': 'стр',
-            'литер': 'лит'
-        };
-        
-        Object.entries(replacements).forEach(([full, short]) => {
-            const regex = new RegExp(`\\b${full}\\b`, 'gi');
-            normalized = normalized.replace(regex, short);
-        });
-        
-        // 7. Убираем лишние запятые и пробелы
-        normalized = normalized.replace(/\s+/g, ' ');
-        normalized = normalized.replace(/,+/g, ',');
-        normalized = normalized.replace(/,\s*,/g, ',');
-        normalized = normalized.trim();
-        normalized = normalized.replace(/^,/, '');
-        normalized = normalized.replace(/,$/, '');
-        
-        // 8. Добавляем регион из соответствующего поля
-        if (region && !normalized.toLowerCase().includes(region.toLowerCase())) {
-            const cleanRegion = region
-                .replace(/\s*область\s*/gi, '')
-                .replace(/\s*край\s*/gi, '')
-                .replace(/\s*республика\s*/gi, '')
-                .trim();
+        // Ищем улицу
+        const streetIndex = parts.findIndex(p => p.match(/(ул\.|пр-кт\.|пер\.|б-р\.)/));
+        if (streetIndex !== -1) {
+            simplified.push(parts[streetIndex]);
             
-            if (cleanRegion && !normalized.toLowerCase().includes(cleanRegion.toLowerCase())) {
-                normalized = `${normalized}, ${region}`;
+            // Ищем номер дома после улицы
+            if (streetIndex + 1 < parts.length) {
+                const nextPart = parts[streetIndex + 1];
+                if (nextPart.match(/\d/)) {
+                    simplified.push(nextPart);
+                }
             }
         }
         
-        // 9. Добавляем страну если нет
-        if (!normalized.toLowerCase().includes('россия')) {
-            normalized = `${normalized}, Россия`;
+        if (simplified.length > 0) {
+            normalized = simplified.join(', ');
+        } else if (parts.length >= 2) {
+            // Просто берем последние 2 части
+            normalized = parts.slice(-2).join(', ');
         }
-        
-        return normalized.trim();
     }
+    
+    console.log(`✅ Нормализовано: ${normalized}`);
+    return normalized;
+}
     
     // Оригинальная функция нормализации (для обратной совместимости)
     normalizeAddress(address, region = '') {
@@ -2073,4 +2078,5 @@ window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
 window.testGeocoding = testGeocoding;
+
 
