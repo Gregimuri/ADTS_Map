@@ -69,126 +69,154 @@ class GeocodingSystem {
     
     // НОРМАЛИЗАЦИЯ АДРЕСА ДЛЯ РОССИЙСКОГО ФОРМАТА
     normalizeRussianAddress(address, region = '') {
-    if (!address) return '';
-    
-    let normalized = address.toString().trim();
-    
-    console.log(`🔍 Исходный адрес: ${normalized}`);
-    
-    // 1. Удаляем почтовый индекс
-    normalized = normalized.replace(/^\d{6},?\s*/, '');
-    normalized = normalized.replace(/,\s*\d{6}$/, '');
-    
-    // 2. Удаляем дублирование региона
-    if (region) {
-        const regionPattern = new RegExp(`^${region}\\s*[/,–-]\\s*`, 'i');
-        normalized = normalized.replace(regionPattern, '');
-        normalized = normalized.replace(new RegExp(`^${region},?\\s*`, 'i'), '');
-    }
-    
-    // 3. Удаляем текст в скобках
-    normalized = normalized.replace(/\s*\([^)]*\)/g, '');
-    
-    // 4. Удаляем специальные пометки
-    const stopWords = [
-        'нас. пункт', 'населенный пункт', 'нас.пункт', 'Нас.пункт',
-        'торговая точка', 'торг точка', 'тт', 'магазин',
-        'здание', 'помещение', 'пом.', 'владение', 'влад.',
-        'корп.', 'стр.', 'строение', 'литер', 'лит.',
-        'дом №', 'дом№', '№', 'зд.', 'помещ.', 'влд.'
-    ];
-    
-    stopWords.forEach(word => {
-        const regex = new RegExp(`\\s*${word}\\s*`, 'gi');
-        normalized = normalized.replace(regex, ' ');
-    });
-    
-    // 5. Упрощаем для Яндекса - только самое важное
-    // Яндекс не любит длинные адреса с деталями
-    
-    // 6. Убираем "Россия" - Яндекс и так ищет в России
-    normalized = normalized.replace(/,\s*Россия$/i, '');
-    normalized = normalized.replace(/,\s*РФ$/i, '');
-    
-    // 7. Стандартизируем сокращения (упрощенная версия)
-    const replacements = [
-        ['улица', 'ул.'],
-        ['проспект', 'пр-кт.'],
-        ['переулок', 'пер.'],
-        ['бульвар', 'б-р.'],
-        ['шоссе', 'ш.'],
-        ['площадь', 'пл.'],
-        ['набережная', 'наб.'],
-        ['село', 'с.'],
-        ['деревня', 'д.'],
-        ['поселок', 'п.'],
-        ['посёлок', 'п.'],
-        ['город', 'г.'],
-        ['район', 'р-н'],
-        ['область', 'обл.'],
-        ['край', 'край'],
-        ['республика', 'респ.']
-    ];
-    
-    replacements.forEach(([from, to]) => {
-        const regex = new RegExp(`\\b${from}\\b`, 'gi');
-        normalized = normalized.replace(regex, to);
-    });
-    
-    // 8. Убираем лишние пробелы и запятые
-    normalized = normalized.replace(/\s+/g, ' ');
-    normalized = normalized.replace(/,+/g, ',');
-    normalized = normalized.replace(/\s*,\s*/g, ', ');
-    normalized = normalized.trim();
-    
-    // 9. Убираем запятую в начале и конце
-    normalized = normalized.replace(/^,\s*/, '');
-    normalized = normalized.replace(/,\s*$/, '');
-    
-    // 10. Для Яндекса делаем адрес короче - оставляем только 2-3 ключевых элемента
-    const parts = normalized.split(',').map(p => p.trim()).filter(p => p);
-    
-    if (parts.length > 3) {
-        // Берем: город, улица, дом (если есть)
-        const simplified = [];
+        if (!address) return '';
         
-        // Ищем город
-        const cityIndex = parts.findIndex(p => p.match(/(г\.|с\.|п\.|пгт\.)/));
-        if (cityIndex !== -1) {
-            simplified.push(parts[cityIndex]);
-        } else if (parts.length > 0) {
-            simplified.push(parts[0]); // Первый элемент как город
+        let normalized = address.toString().trim();
+        
+        console.log(`🔍 Исходный адрес: ${normalized}`);
+        
+        // 1. Удаляем почтовый индекс
+        normalized = normalized.replace(/^\d{6},?\s*/, '');
+        normalized = normalized.replace(/,\s*\d{6}$/, '');
+        
+        // 2. Удаляем дублирование региона
+        if (region) {
+            const regionPattern = new RegExp(`^${region}\\s*[/,–-]\\s*`, 'i');
+            normalized = normalized.replace(regionPattern, '');
+            normalized = normalized.replace(new RegExp(`^${region},?\\s*`, 'i'), '');
         }
         
-        // Ищем улицу
-        const streetIndex = parts.findIndex(p => p.match(/(ул\.|пр-кт\.|пер\.|б-р\.)/));
-        if (streetIndex !== -1) {
-            simplified.push(parts[streetIndex]);
+        // 3. Удаляем текст в скобках
+        normalized = normalized.replace(/\s*\([^)]*\)/g, '');
+        
+        // 4. Удаляем специальные пометки
+        const stopWords = [
+            'нас. пункт', 'населенный пункт', 'нас.пункт', 'Нас.пункт',
+            'торговая точка', 'торг точка', 'тт', 'магазин',
+            'здание', 'помещение', 'пом.', 'владение', 'влад.',
+            'корп.', 'стр.', 'строение', 'литер', 'лит.',
+            'дом №', 'дом№', '№', 'зд.', 'помещ.', 'влд.'
+        ];
+        
+        stopWords.forEach(word => {
+            const regex = new RegExp(`\\s*${word}\\s*`, 'gi');
+            normalized = normalized.replace(regex, ' ');
+        });
+        
+        // 5. Убираем "Россия" - Яндекс и так ищет в России
+        normalized = normalized.replace(/,\s*Россия$/i, '');
+        normalized = normalized.replace(/,\s*РФ$/i, '');
+        
+        // 6. Стандартизируем сокращения (упрощенная версия)
+        const replacements = [
+            ['улица', 'ул.'],
+            ['проспект', 'пр-кт.'],
+            ['переулок', 'пер.'],
+            ['бульвар', 'б-р.'],
+            ['шоссе', 'ш.'],
+            ['площадь', 'пл.'],
+            ['набережная', 'наб.'],
+            ['село', 'с.'],
+            ['деревня', 'д.'],
+            ['поселок', 'п.'],
+            ['посёлок', 'п.'],
+            ['город', 'г.'],
+            ['район', 'р-н'],
+            ['область', 'обл.'],
+            ['край', 'край'],
+            ['республика', 'респ.']
+        ];
+        
+        replacements.forEach(([from, to]) => {
+            const regex = new RegExp(`\\b${from}\\b`, 'gi');
+            normalized = normalized.replace(regex, to);
+        });
+        
+        // 7. Убираем лишние пробелы и запятые
+        normalized = normalized.replace(/\s+/g, ' ');
+        normalized = normalized.replace(/,+/g, ',');
+        normalized = normalized.replace(/\s*,\s*/g, ', ');
+        normalized = normalized.trim();
+        
+        // 8. Убираем запятую в начале и конце
+        normalized = normalized.replace(/^,\s*/, '');
+        normalized = normalized.replace(/,\s*$/, '');
+        
+        // 9. Для Яндекса делаем адрес короче - оставляем только 2-3 ключевых элемента
+        const parts = normalized.split(',').map(p => p.trim()).filter(p => p);
+        
+        if (parts.length > 3) {
+            // Берем: город, улица, дом (если есть)
+            const simplified = [];
             
-            // Ищем номер дома после улицы
-            if (streetIndex + 1 < parts.length) {
-                const nextPart = parts[streetIndex + 1];
-                if (nextPart.match(/\d/)) {
-                    simplified.push(nextPart);
+            // Ищем город
+            const cityIndex = parts.findIndex(p => p.match(/(г\.|с\.|п\.|пгт\.)/));
+            if (cityIndex !== -1) {
+                simplified.push(parts[cityIndex]);
+            } else if (parts.length > 0) {
+                simplified.push(parts[0]); // Первый элемент как город
+            }
+            
+            // Ищем улицу
+            const streetIndex = parts.findIndex(p => p.match(/(ул\.|пр-кт\.|пер\.|б-р\.)/));
+            if (streetIndex !== -1) {
+                simplified.push(parts[streetIndex]);
+                
+                // Ищем номер дома после улицы
+                if (streetIndex + 1 < parts.length) {
+                    const nextPart = parts[streetIndex + 1];
+                    if (nextPart.match(/\d/)) {
+                        simplified.push(nextPart);
+                    }
                 }
+            }
+            
+            if (simplified.length > 0) {
+                normalized = simplified.join(', ');
+            } else if (parts.length >= 2) {
+                // Просто берем последние 2 части
+                normalized = parts.slice(-2).join(', ');
             }
         }
         
-        if (simplified.length > 0) {
-            normalized = simplified.join(', ');
-        } else if (parts.length >= 2) {
-            // Просто берем последние 2 части
-            normalized = parts.slice(-2).join(', ');
-        }
+        console.log(`✅ Нормализовано: ${normalized}`);
+        return normalized;
     }
     
-    console.log(`✅ Нормализовано: ${normalized}`);
-    return normalized;
-}
-    
-    // Оригинальная функция нормализации (для обратной совместимости)
-    normalizeAddress(address, region = '') {
-        return this.normalizeRussianAddress(address, region);
+    // Упрощенная нормализация для Яндекс
+    normalizeForYandex(address, region = '') {
+        if (!address) return '';
+        
+        let result = '';
+        
+        // 1. Извлекаем город
+        let city = '';
+        const cityMatch = address.match(/(?:г\.|город|с\.|село|п\.|поселок|пгт\.?)\s+[^,]+/i);
+        if (cityMatch) {
+            city = cityMatch[0].replace(/город/gi, 'г.').replace(/село/gi, 'с.').trim();
+        } else if (region) {
+            // Берем первый город из региона
+            city = region.split(' ')[0] + ' г.';
+        }
+        
+        // 2. Извлекаем улицу и дом
+        const streetMatch = address.match(/(?:ул\.|улица|пр-кт\.|проспект|пер\.|переулок)\s+[^,]+/i);
+        const houseMatch = address.match(/\d+[а-я]?(\/\d+)?/);
+        
+        if (city && streetMatch) {
+            result = `${city}, ${streetMatch[0]}`;
+            if (houseMatch) {
+                result += `, ${houseMatch[0]}`;
+            }
+        } else if (city) {
+            result = city;
+        } else {
+            // Простейший вариант
+            result = 'Россия';
+        }
+        
+        console.log(`🎯 Яндекс запрос: ${result}`);
+        return result.trim();
     }
     
     // Генерация ключа для кэша
@@ -251,226 +279,226 @@ class GeocodingSystem {
     
     // ГЕОКОДИРОВАНИЕ ЧЕРЕЗ ЯНДЕКС
     async geocodeYandex(address, region = '') {
-    if (!CONFIG.GEOCODING?.enabled) return null;
-    
-    try {
-        // Используем упрощенную нормализацию для Яндекс
-        const normalized = this.normalizeForYandex(address, region);
+        if (!CONFIG.GEOCODING?.enabled) return null;
         
-        if (!normalized || normalized.length < 3) {
-            console.log('📛 Адрес слишком короткий');
-            return null;
-        }
-        
-        // Проверяем кэш сначала с упрощенным адресом
-        const cached = this.getFromCache(normalized, '');
-        if (cached) {
-            console.log(`📦 Яндекс из кэша: ${normalized.substring(0, 50)}...`);
-            return cached;
-        }
-        
-        // Ждем перед запросом
-        await new Promise(resolve => 
-            setTimeout(resolve, CONFIG.GEOCODING.delays?.yandex || 500));
-        
-        // Кодируем для URL
-        const encoded = encodeURIComponent(normalized);
-        
-        // Проверяем длину
-        if (encoded.length > 200) {
-            console.log('⚠️  Слишком длинный запрос, сокращаем...');
-            return await this.geocodeYandexShort(normalized);
-        }
-        
-        const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
-        
-        console.log(`📍 Яндекс запрос (${encoded.length} chars): ${normalized}`);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'application/json',
-                'Accept-Language': 'ru-RU,ru;q=0.9'
-            }
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            console.error(`❌ Яндекс ошибка ${response.status}`);
+        try {
+            // Используем упрощенную нормализацию для Яндекс
+            const normalized = this.normalizeForYandex(address, region);
             
-            // Пробуем альтернативный формат
-            if (response.status === 400) {
-                console.log('🔄 Пробуем альтернативный формат...');
-                return await this.geocodeYandexAlternative(address, region);
-            }
-            
-            return null;
-        }
-        
-        const data = await response.json();
-        
-        if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
-            const pos = data.response.GeoObjectCollection.featureMember[0]
-                .GeoObject.Point.pos.split(' ');
-            
-            const lon = parseFloat(pos[0]);
-            const lat = parseFloat(pos[1]);
-            
-            // Проверяем координаты
-            if (lon < 19 || lon > 180 || lat < 41 || lat > 82) {
-                console.log('⚠️  Координаты вне России');
+            if (!normalized || normalized.length < 3) {
+                console.log('📛 Адрес слишком короткий');
                 return null;
             }
             
-            this.stats.yandex++;
-            console.log(`✅ Яндекс нашел: ${lat}, ${lon}`);
-            
-            const result = {
-                lat: lat,
-                lng: lon,
-                source: 'yandex',
-                isExact: true,
-                normalized: normalized
-            };
-            
-            // Сохраняем в кэш
-            this.saveToCache(normalized, '', lat, lon, 'yandex', true);
-            
-            return result;
-        }
-        
-        console.log(`❌ Яндекс не нашел: ${normalized}`);
-        return null;
-        
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.log('⏰ Яндекс timeout');
-        } else {
-            console.warn('Ошибка Яндекс:', error.message);
-        }
-        return null;
-    }
-}
-
-    // Альтернативный метод для Яндекс
-async geocodeYandexAlternative(address, region = '') {
-    try {
-        // Пробуем самый простой формат: "город, улица дом"
-        let query = '';
-        
-        // Извлекаем основные компоненты
-        const components = [];
-        
-        // Город
-        if (region) {
-            const city = region.split(' ')[0];
-            components.push(city);
-        }
-        
-        // Улица и дом
-        const streetMatch = address.match(/(ул\.|улица|пр-кт|проспект|пер\.|переулок)\s+[^,\d]+/i);
-        const houseMatch = address.match(/\d+[а-я]?(\/\d+)?/);
-        
-        if (streetMatch) {
-            let street = streetMatch[0].replace(/улица/gi, 'ул.');
-            if (houseMatch) {
-                street += ' ' + houseMatch[0];
+            // Проверяем кэш сначала с упрощенным адресом
+            const cached = this.getFromCache(normalized, '');
+            if (cached) {
+                console.log(`📦 Яндекс из кэша: ${normalized.substring(0, 50)}...`);
+                return cached;
             }
-            components.push(street);
-        }
-        
-        if (components.length === 0) {
+            
+            // Ждем перед запросом
+            await new Promise(resolve => 
+                setTimeout(resolve, CONFIG.GEOCODING.delays?.yandex || 500));
+            
+            // Кодируем для URL
+            const encoded = encodeURIComponent(normalized);
+            
+            // Проверяем длину
+            if (encoded.length > 200) {
+                console.log('⚠️  Слишком длинный запрос, сокращаем...');
+                return await this.geocodeYandexShort(normalized);
+            }
+            
+            const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
+            
+            console.log(`📍 Яндекс запрос (${encoded.length} chars): ${normalized}`);
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json',
+                    'Accept-Language': 'ru-RU,ru;q=0.9'
+                }
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (!response.ok) {
+                console.error(`❌ Яндекс ошибка ${response.status}`);
+                
+                // Пробуем альтернативный формат
+                if (response.status === 400) {
+                    console.log('🔄 Пробуем альтернативный формат...');
+                    return await this.geocodeYandexAlternative(address, region);
+                }
+                
+                return null;
+            }
+            
+            const data = await response.json();
+            
+            if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
+                const pos = data.response.GeoObjectCollection.featureMember[0]
+                    .GeoObject.Point.pos.split(' ');
+                
+                const lon = parseFloat(pos[0]);
+                const lat = parseFloat(pos[1]);
+                
+                // Проверяем координаты
+                if (lon < 19 || lon > 180 || lat < 41 || lat > 82) {
+                    console.log('⚠️  Координаты вне России');
+                    return null;
+                }
+                
+                this.stats.yandex++;
+                console.log(`✅ Яндекс нашел: ${lat}, ${lon}`);
+                
+                const result = {
+                    lat: lat,
+                    lng: lon,
+                    source: 'yandex',
+                    isExact: true,
+                    normalized: normalized
+                };
+                
+                // Сохраняем в кэш
+                this.saveToCache(normalized, '', lat, lon, 'yandex', true);
+                
+                return result;
+            }
+            
+            console.log(`❌ Яндекс не нашел: ${normalized}`);
+            return null;
+            
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.log('⏰ Яндекс timeout');
+            } else {
+                console.warn('Ошибка Яндекс:', error.message);
+            }
             return null;
         }
-        
-        query = components.join(', ');
-        
-        console.log(`🔄 Яндекс альтернатива: ${query}`);
-        
-        const encoded = encodeURIComponent(query);
-        const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
-        
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0'
-            }
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            
-            if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
-                const pos = data.response.GeoObjectCollection.featureMember[0]
-                    .GeoObject.Point.pos.split(' ');
-                
-                console.log(`✅ Яндекс (альт.) нашел: ${pos[1]}, ${pos[0]}`);
-                
-                return {
-                    lat: parseFloat(pos[1]),
-                    lng: parseFloat(pos[0]),
-                    source: 'yandex_alt',
-                    isExact: true,
-                    normalized: query
-                };
-            }
-        }
-        
-        return null;
-        
-    } catch (error) {
-        console.log('Ошибка Яндекс альтернатива:', error.message);
-        return null;
     }
-}
-
-// Краткий метод для Яндекс
-async geocodeYandexShort(address) {
-    try {
-        // Самый простой запрос: только город
-        const cityMatch = address.match(/(?:г\.|город)\s+[^,]+/i) || 
-                         address.match(/[А-Я][а-я]+(?=,|$)/);
-        
-        if (!cityMatch) return null;
-        
-        const city = cityMatch[0].replace(/город/gi, 'г.').trim();
-        const encoded = encodeURIComponent(city);
-        const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
-        
-        console.log(`⚡ Яндекс кратко: ${city}`);
-        
-        const response = await fetch(url);
-        
-        if (response.ok) {
-            const data = await response.json();
+    
+    // Альтернативный метод для Яндекс
+    async geocodeYandexAlternative(address, region = '') {
+        try {
+            // Пробуем самый простой формат: "город, улица дом"
+            let query = '';
             
-            if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
-                const pos = data.response.GeoObjectCollection.featureMember[0]
-                    .GeoObject.Point.pos.split(' ');
-                
-                console.log(`✅ Яндекс (кратко) нашел: ${pos[1]}, ${pos[0]}`);
-                
-                return {
-                    lat: parseFloat(pos[1]),
-                    lng: parseFloat(pos[0]),
-                    source: 'yandex_city',
-                    isExact: false, // Только город, не точный
-                    normalized: city
-                };
+            // Извлекаем основные компоненты
+            const components = [];
+            
+            // Город
+            if (region) {
+                const city = region.split(' ')[0];
+                components.push(city);
             }
+            
+            // Улица и дом
+            const streetMatch = address.match(/(ул\.|улица|пр-кт|проспект|пер\.|переулок)\s+[^,\d]+/i);
+            const houseMatch = address.match(/\d+[а-я]?(\/\d+)?/);
+            
+            if (streetMatch) {
+                let street = streetMatch[0].replace(/улица/gi, 'ул.');
+                if (houseMatch) {
+                    street += ' ' + houseMatch[0];
+                }
+                components.push(street);
+            }
+            
+            if (components.length === 0) {
+                return null;
+            }
+            
+            query = components.join(', ');
+            
+            console.log(`🔄 Яндекс альтернатива: ${query}`);
+            
+            const encoded = encodeURIComponent(query);
+            const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
+            
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
+                    const pos = data.response.GeoObjectCollection.featureMember[0]
+                        .GeoObject.Point.pos.split(' ');
+                    
+                    console.log(`✅ Яндекс (альт.) нашел: ${pos[1]}, ${pos[0]}`);
+                    
+                    return {
+                        lat: parseFloat(pos[1]),
+                        lng: parseFloat(pos[0]),
+                        source: 'yandex_alt',
+                        isExact: true,
+                        normalized: query
+                    };
+                }
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.log('Ошибка Яндекс альтернатива:', error.message);
+            return null;
         }
-        
-        return null;
-        
-    } catch (error) {
-        console.log('Ошибка Яндекс кратко:', error.message);
-        return null;
     }
-}
+    
+    // Краткий метод для Яндекс
+    async geocodeYandexShort(address) {
+        try {
+            // Самый простой запрос: только город
+            const cityMatch = address.match(/(?:г\.|город)\s+[^,]+/i) || 
+                             address.match(/[А-Я][а-я]+(?=,|$)/);
+            
+            if (!cityMatch) return null;
+            
+            const city = cityMatch[0].replace(/город/gi, 'г.').trim();
+            const encoded = encodeURIComponent(city);
+            const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
+            
+            console.log(`⚡ Яндекс кратко: ${city}`);
+            
+            const response = await fetch(url);
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
+                    const pos = data.response.GeoObjectCollection.featureMember[0]
+                        .GeoObject.Point.pos.split(' ');
+                    
+                    console.log(`✅ Яндекс (кратко) нашел: ${pos[1]}, ${pos[0]}`);
+                    
+                    return {
+                        lat: parseFloat(pos[1]),
+                        lng: parseFloat(pos[0]),
+                        source: 'yandex_city',
+                        isExact: false,
+                        normalized: city
+                    };
+                }
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.log('Ошибка Яндекс кратко:', error.message);
+            return null;
+        }
+    }
     
     // ГЕОКОДИРОВАНИЕ ЧЕРЕЗ NOMINATIM (OpenStreetMap)
     async geocodeNominatim(address, region = '') {
@@ -479,9 +507,13 @@ async geocodeYandexShort(address) {
         try {
             const normalized = this.normalizeRussianAddress(address, region);
             
-            // Ждем перед запросом
+            if (!normalized || normalized.length < 3) {
+                return null;
+            }
+            
+            // Ждем перед запросом (требование OSM API)
             await new Promise(resolve => 
-                setTimeout(resolve, CONFIG.GEOCODING.delays?.nominatim || 1000));
+                setTimeout(resolve, CONFIG.GEOCODING.delays?.nominatim || 2000));
             
             const encoded = encodeURIComponent(normalized);
             const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1&countrycodes=ru&accept-language=ru`;
@@ -527,63 +559,75 @@ async geocodeYandexShort(address) {
     
     // ГЛАВНАЯ ФУНКЦИЯ ГЕОКОДИРОВАНИЯ
     async geocode(address, region = '', pointId = null) {
-    if (!CONFIG.GEOCODING?.enabled || !address) {
-        return this.getApproximateCoordinates(address, region);
-    }
-    
-    this.stats.total++;
-    
-    // 1. Сначала пробуем Яндекс с упрощенным адресом
-    let result = null;
-    
-    // Пробуем основной метод Яндекс
-    result = await this.geocodeYandex(address, region);
-    
-    // 2. Если Яндекс не нашел точные координаты
-    if (!result || !result.isExact) {
-        console.log('🔄 Яндекс не нашел точные координаты, пробуем OSM...');
-        
-        // Пробуем OSM с упрощенным адресом
-        const osmResult = await this.geocodeNominatim(address, region);
-        
-        if (osmResult && osmResult.isExact) {
-            result = osmResult;
-        } else if (result) {
-            // Если Яндекс нашел что-то (хотя бы город), используем это
-            console.log('📌 Используем результат Яндекс (хотя бы город)');
-        } else if (osmResult) {
-            // Если OSM нашел что-то
-            result = osmResult;
+        if (!CONFIG.GEOCODING?.enabled || !address) {
+            return this.getApproximateCoordinates(address, region);
         }
-    }
-    
-    // 3. Если нашли координаты
-    if (result) {
-        // Сохраняем в кэш с оригинальным адресом для будущих поисков
-        this.saveToCache(address, region, result.lat, result.lng, result.source, result.isExact);
         
-        // Обновляем точку на карте
+        this.stats.total++;
+        
+        // 1. Проверяем кэш
+        const cached = this.getFromCache(address, region);
+        if (cached) {
+            console.log(`📦 Из кэша: ${address.substring(0, 50)}...`);
+            return cached;
+        }
+        
+        console.log(`🔍 Геокодирование: ${address.substring(0, 60)}...`);
+        
+        // 2. Нормализуем адрес
+        const normalized = this.normalizeRussianAddress(address, region);
+        console.log(`   Нормализовано: ${normalized.substring(0, 80)}...`);
+        
+        let result = null;
+        
+        // 3. Сначала пробуем Яндекс с упрощенным адресом
+        result = await this.geocodeYandex(address, region);
+        
+        // 4. Если Яндекс не нашел точные координаты
+        if (!result || !result.isExact) {
+            console.log('🔄 Яндекс не нашел точные координаты, пробуем OSM...');
+            
+            // Пробуем OSM
+            const osmResult = await this.geocodeNominatim(address, region);
+            
+            if (osmResult && osmResult.isExact) {
+                result = osmResult;
+            } else if (result) {
+                // Если Яндекс нашел что-то (хотя бы город), используем это
+                console.log('📌 Используем результат Яндекс (хотя бы город)');
+            } else if (osmResult) {
+                // Если OSM нашел что-то
+                result = osmResult;
+            }
+        }
+        
+        // 5. Если нашли координаты
+        if (result) {
+            // Сохраняем в кэш с оригинальным адресом
+            this.saveToCache(address, region, result.lat, result.lng, result.source, result.isExact);
+            
+            // Обновляем точку на карте
+            if (pointId) {
+                this.updatePointAndMarker(pointId, result.lat, result.lng, result.source);
+            }
+            
+            return result;
+        }
+        
+        // 6. Если ничего не нашли
+        this.stats.failed++;
+        console.log('🎯 Используем приблизительные координаты');
+        
+        const approximate = this.getApproximateCoordinates(address, region);
+        this.saveToCache(address, region, approximate.lat, approximate.lng, 'approximate', false);
+        
+        // Все равно обновляем точку (приблизительные координаты лучше чем ничего)
         if (pointId) {
-            this.updatePointAndMarker(pointId, result.lat, result.lng, result.source);
+            this.updatePointAndMarker(pointId, approximate.lat, approximate.lng, 'approximate');
         }
         
-        return result;
+        return approximate;
     }
-    
-    // 4. Если ничего не нашли
-    this.stats.failed++;
-    console.log('🎯 Используем приблизительные координаты');
-    
-    const approximate = this.getApproximateCoordinates(address, region);
-    this.saveToCache(address, region, approximate.lat, approximate.lng, 'approximate', false);
-    
-    // Все равно обновляем точку (приблизительные координаты лучше чем ничего)
-    if (pointId) {
-        this.updatePointAndMarker(pointId, approximate.lat, approximate.lng, 'approximate');
-    }
-    
-    return approximate;
-}
     
     // Получение приблизительных координат
     getApproximateCoordinates(address, region = '') {
@@ -730,8 +774,8 @@ async geocodeYandexShort(address) {
     
     // АНИМАЦИЯ ПЕРЕМЕЩЕНИЯ МАРКЕРА
     animateMarkerMove(oldMarker, newMarker, fromLat, fromLng, toLat, toLng) {
-        const steps = 20; // Количество шагов анимации
-        const duration = 1000; // Длительность анимации в мс
+        const steps = 20;
+        const duration = 1000;
         const stepTime = duration / steps;
         
         let step = 0;
@@ -769,14 +813,13 @@ async geocodeYandexShort(address) {
         // Анимация перемещения
         const animate = () => {
             if (step > steps) {
-                // Удаляем анимированный маркер
                 map.removeLayer(animatedMarker);
                 return;
             }
             
             // Интерполяция координат
             const t = step / steps;
-            const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // Кубическое easing
+            const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
             
             const currentLat = fromLat + (toLat - fromLat) * easeT;
             const currentLng = fromLng + (toLng - fromLng) * easeT;
@@ -787,7 +830,6 @@ async geocodeYandexShort(address) {
             setTimeout(animate, stepTime);
         };
         
-        // Запускаем анимацию
         animate();
     }
     
@@ -823,7 +865,6 @@ async geocodeYandexShort(address) {
         this.processing = true;
         
         try {
-            // Сортируем по приоритету
             this.queue.sort((a, b) => b.priority - a.priority);
             
             const maxConcurrent = CONFIG.GEOCODING.maxConcurrent || 3;
@@ -831,7 +872,6 @@ async geocodeYandexShort(address) {
             
             console.log(`⚙️  Обработка очереди: ${batch.length} задач`);
             
-            // Обновляем индикатор
             updateGeocodingIndicator(true, this.queue.length);
             
             await Promise.allSettled(
@@ -847,7 +887,7 @@ async geocodeYandexShort(address) {
                             console.log(`✅ Очередь: успех для ${task.address?.substring(0, 40)}...`);
                         } else {
                             task.retryCount++;
-                            task.priority = -1; // Понижаем приоритет
+                            task.priority = -1;
                             
                             if (task.retryCount <= CONFIG.GEOCODING.maxRetries) {
                                 this.queue.push(task);
@@ -864,10 +904,8 @@ async geocodeYandexShort(address) {
         } finally {
             this.processing = false;
             
-            // Обновляем индикатор
             updateGeocodingIndicator(false, this.queue.length);
             
-            // Если в очереди еще есть задачи, обрабатываем следующую партию
             if (this.queue.length > 0) {
                 setTimeout(() => this.processQueue(), 2000);
             } else {
@@ -881,7 +919,6 @@ async geocodeYandexShort(address) {
     startBackgroundGeocoding() {
         if (!CONFIG.GEOCODING?.enabled) return;
         
-        // Добавляем все точки с приблизительными координатами в очередь
         const pointsToGeocode = allPoints.filter(p => 
             p.address && 
             (p.isMock || !p.lat || !p.lng)
@@ -893,7 +930,6 @@ async geocodeYandexShort(address) {
             this.addToQueue(point);
         });
         
-        // Запускаем обработку очереди
         if (pointsToGeocode.length > 0 && !this.processing) {
             setTimeout(() => this.processQueue(), 3000);
         }
@@ -926,20 +962,16 @@ function initApp() {
     console.log('Инициализация приложения...');
     initMap();
     
-    // Инициализируем систему геокодирования
     if (CONFIG.GEOCODING?.enabled) {
         geocodingSystem = new GeocodingSystem();
         console.log('🚀 Система геокодирования инициализирована');
     }
     
-    // Показываем демо-данные сразу
     showDemoData();
     
-    // Загружаем реальные данные
     loadData();
     setupAutoUpdate();
     
-    // Настраиваем автоматическую обработку очереди геокодирования
     if (geocodingSystem) {
         setInterval(() => {
             if (geocodingSystem.queue.length > 0 && !geocodingSystem.processing) {
@@ -949,7 +981,6 @@ function initApp() {
     }
 }
 
-// Запускаем приложение при загрузке страницы
 document.addEventListener('DOMContentLoaded', initApp);
 
 // ========== ИНИЦИАЛИЗАЦИЯ КАРТЫ ==========
@@ -1114,7 +1145,6 @@ async function loadData() {
         allPoints = processData(data);
         console.log(`Обработано точек: ${allPoints.length}`);
         
-        // Быстрое добавление координат
         allPoints = await addCoordinatesFast(allPoints);
         console.log(`Координаты добавлены: ${allPoints.length}`);
         
@@ -1123,7 +1153,6 @@ async function loadData() {
         updateLegend();
         showPointsOnMap();
         
-        // Запускаем фоновое геокодирование
         if (CONFIG.GEOCODING?.enabled && CONFIG.GEOCODING.autoGeocode && geocodingSystem) {
             geocodingSystem.startBackgroundGeocoding();
         }
@@ -1184,14 +1213,12 @@ function parseCSV(csvText) {
                 const char = line[i];
                 const nextChar = i + 1 < line.length ? line[i + 1] : '';
                 
-                // Начало кавычек
                 if ((char === '"' || char === "'") && !inQuotes) {
                     inQuotes = true;
                     quoteChar = char;
                     continue;
                 }
                 
-                // Конец кавычек
                 if (char === quoteChar && inQuotes) {
                     if (nextChar === quoteChar) {
                         current += char;
@@ -1203,21 +1230,17 @@ function parseCSV(csvText) {
                     continue;
                 }
                 
-                // Разделитель вне кавычек
                 if (char === ',' && !inQuotes) {
                     row.push(current.trim());
                     current = '';
                     continue;
                 }
                 
-                // Добавляем символ
                 current += char;
             }
             
-            // Добавляем последнюю ячейку
             row.push(current.trim());
             
-            // Убираем кавычки из ячеек
             const cleanedRow = row.map(cell => {
                 let cleaned = cell;
                 if ((cleaned.startsWith('"') && cleaned.endsWith('"')) || 
@@ -1262,7 +1285,6 @@ function processData(rows) {
             continue;
         }
         
-        // Создаем точку
         const point = {
             id: `point_${i}_${Date.now()}`,
             sheetRow: i + 1,
@@ -1276,7 +1298,6 @@ function processData(rows) {
             originalStatus: ''
         };
         
-        // Заполняем данные из соответствующих колонок
         Object.keys(colIndices).forEach(key => {
             const index = colIndices[key];
             if (index !== -1 && index < row.length && row[index]) {
@@ -1287,19 +1308,16 @@ function processData(rows) {
             }
         });
         
-        // Нормализуем адрес для российского формата
         if (point.address && geocodingSystem) {
             point.originalAddress = point.address;
             point.address = geocodingSystem.normalizeRussianAddress(point.address, point.region);
         }
         
-        // Группируем статусы
         if (point.status && CONFIG.STATUS_MAPPING) {
             point.originalStatus = point.status;
             point.status = CONFIG.STATUS_MAPPING[point.status] || point.status;
         }
         
-        // Если нет названия, используем часть адреса
         if (!point.name || point.name.trim() === '') {
             if (point.address) {
                 const firstPart = point.address.split(',')[0];
@@ -1311,7 +1329,6 @@ function processData(rows) {
             }
         }
         
-        // Добавляем точку если есть данные
         if (point.name || point.address || point.region) {
             points.push(point);
         }
@@ -1334,19 +1351,16 @@ function findColumnIndices(headers) {
         contractor: -1
     };
     
-    // Для вашей конкретной таблицы - жесткое назначение
     if (headers.length >= 6) {
-        // Стандартный порядок: Название ТТ, Регион, Адрес, Статус ТТ, Менеджер ФИО, Подрядчик ФИО
         const standardOrder = {
-            name: 0,      // "Название ТТ"
-            region: 1,    // "Регион"
-            address: 2,   // "Адрес"
-            status: 3,    // "Статус ТТ"
-            manager: 4,   // "Менеджер ФИО"
-            contractor: 5 // "Подрядчик ФИО"
+            name: 0,
+            region: 1,
+            address: 2,
+            status: 3,
+            manager: 4,
+            contractor: 5
         };
         
-        // Проверяем, что заголовки примерно соответствуют
         const header0 = headers[0]?.toLowerCase() || '';
         const header1 = headers[1]?.toLowerCase() || '';
         const header2 = headers[2]?.toLowerCase() || '';
@@ -1357,10 +1371,8 @@ function findColumnIndices(headers) {
         }
     }
     
-    // Если не подходит стандартный порядок, ищем по содержимому
     const headersLower = headers.map(h => h.toString().toLowerCase().trim());
     
-    // Ищем точные совпадения
     const exactMatches = {
         'название тт': 'name',
         'регион': 'region', 
@@ -1383,7 +1395,6 @@ function findColumnIndices(headers) {
         }
     });
     
-    // Заполняем недостающие индексы по порядку
     let nextIndex = 0;
     Object.keys(indices).forEach(key => {
         if (indices[key] === -1) {
@@ -1432,18 +1443,15 @@ async function addCoordinatesFast(points) {
             console.log(`   Прогресс: ${i}/${points.length}`);
         }
         
-        // Если уже есть точные координаты
         if (point.lat && point.lng && !point.isMock) {
             updatedPoints.push(point);
             continue;
         }
         
-        // Проверяем кэш
         if (point.address) {
             const cached = geocodingSystem.getFromCache(point.originalAddress || point.address, point.region);
             
             if (cached) {
-                // Используем координаты из кэша
                 point.lat = cached.lat;
                 point.lng = cached.lng;
                 point.geocodingSource = cached.source;
@@ -1455,7 +1463,6 @@ async function addCoordinatesFast(points) {
             }
         }
         
-        // Используем приблизительные координаты для быстрого отображения
         const approximate = geocodingSystem.getApproximateCoordinates(point.address, point.region);
         point.lat = approximate.lat;
         point.lng = approximate.lng;
@@ -1573,7 +1580,6 @@ function createMarker(point) {
 function createPopupContent(point) {
     const color = CONFIG.STATUS_COLORS[point.status] || CONFIG.STATUS_COLORS.default;
     
-    // Очищаем адрес для отображения
     let displayAddress = point.address || '';
     if (displayAddress) {
         displayAddress = displayAddress.replace(/^\d{6},?\s*/, '');
@@ -1581,7 +1587,6 @@ function createPopupContent(point) {
         displayAddress = displayAddress.trim();
     }
     
-    // Информация о точности координат
     let accuracyInfo = '';
     if (point.isMock) {
         accuracyInfo = `
@@ -1849,7 +1854,6 @@ function showPointDetails(point) {
         color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
     }
     
-    // Очищаем адрес
     let displayAddress = point.address || '';
     if (displayAddress) {
         displayAddress = displayAddress.replace(/^\d{6},?\s*/, '');
@@ -2009,7 +2013,6 @@ function updateLegend() {
         }
     });
     
-    // Добавляем стандартные статусы, если их нет в данных
     ['Активная', 'На паузе', 'Закрыта', 'План'].forEach(status => {
         if (!statuses.has(status)) {
             statuses.add(status);
@@ -2148,7 +2151,6 @@ function clearGeocodingCache() {
         localStorage.removeItem('geocoding_cache');
         showNotification('Кэш геокодирования очищен', 'success');
         
-        // Перезагружаем данные
         setTimeout(() => {
             loadData();
         }, 1000);
@@ -2182,45 +2184,62 @@ function showGeocodingStats() {
 }
 
 // ========== ФУНКЦИЯ ДЛЯ ТЕСТИРОВАНИЯ ==========
-function testGeocoding() {
-    if (!geocodingSystem) {
-        console.log('Система геокодирования не инициализирована');
-        return;
-    }
-    
-    const testAddresses = [
-        "Алтайский край, Мамонтово (с) (Нас.пункт), ул. Партизанская, 158",
-        "658044, Алтайский край, Первомайский р-н, Боровиха с, 2-я Боровая ул, дом № зд. 31Б",
-        "Алтайский крайул. Барнаул Юрина, 184А1",
-        "Архангельская область / Кировская область, Подосиновский р-н, Подосиновец пгт, Свободы ул, дом № 49а"
+function testAddressGeocoding() {
+    const testCases = [
+        {
+            address: "Алтайский край, Мамонтово (с) (Нас.пункт), ул. Партизанская, 158",
+            region: "Алтайский край"
+        },
+        {
+            address: "658044, Алтайский край, Первомайский р-н, Боровиха с, 2-я Боровая ул, дом № зд. 31Б",
+            region: "Алтайский край"
+        },
+        {
+            address: "Алтайский край, Барнаул (Нас.пункт), ул. Попова, 114/1",
+            region: "Алтайский край"
+        }
     ];
     
-    console.log('=== ТЕСТИРОВАНИЕ НОРМАЛИЗАЦИИ АДРЕСОВ ===');
-    testAddresses.forEach((addr, i) => {
-        console.log(`\nПример ${i + 1}:`);
-        console.log('Исходный:', addr);
-        console.log('Нормализованный:', geocodingSystem.normalizeRussianAddress(addr, 'Алтайский край'));
-    });
-    console.log('=== КОНЕЦ ТЕСТА ===');
-}
-
-// ========== УПРАВЛЕНИЕ ИНДИКАТОРОМ ГЕОКОДИРОВАНИЯ ==========
-function updateGeocodingIndicator(active, queueSize = 0) {
-    const indicator = document.getElementById('geocoding-indicator');
-    const textElement = document.getElementById('geocoding-indicator-text');
+    console.log('=== ТЕСТ ГЕОКОДИРОВАНИЯ ===');
     
-    if (!indicator || !textElement) return;
-    
-    if (active || queueSize > 0) {
-        indicator.style.display = 'flex';
-        if (active) {
-            textElement.textContent = `Геокодирование... (${queueSize} в очереди)`;
-        } else {
-            textElement.textContent = `В очереди: ${queueSize}`;
+    for (let i = 0; i < testCases.length; i++) {
+        const test = testCases[i];
+        console.log(`\nТест ${i + 1}: ${test.address.substring(0, 60)}...`);
+        
+        if (geocodingSystem) {
+            const normalized = geocodingSystem.normalizeForYandex(test.address, test.region);
+            console.log(`Для Яндекс: ${normalized}`);
+            
+            const encoded = encodeURIComponent(normalized);
+            console.log(`Закодировано (${encoded.length} chars): ${encoded.substring(0, 80)}...`);
+            
+            const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encoded}&results=1`;
+            console.log(`URL: ${url.substring(0, 100)}...`);
+            
+            fetch(url)
+                .then(response => {
+                    console.log(`Статус: ${response.status} ${response.statusText}`);
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                })
+                .then(data => {
+                    if (data.response?.GeoObjectCollection?.featureMember?.length > 0) {
+                        const pos = data.response.GeoObjectCollection.featureMember[0]
+                            .GeoObject.Point.pos.split(' ');
+                        console.log(`✅ Найдено: ${pos[1]}, ${pos[0]}`);
+                    } else {
+                        console.log('❌ Не найдено в результатах');
+                    }
+                })
+                .catch(error => {
+                    console.log(`❌ Ошибка: ${error.message}`);
+                });
         }
-    } else {
-        indicator.style.display = 'none';
     }
+    
+    console.log('=== КОНЕЦ ТЕСТА ===');
 }
 
 // ========== ЭКСПОРТ ФУНКЦИЙ ==========
@@ -2232,7 +2251,4 @@ window.closeModal = closeModal;
 window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
-window.testGeocoding = testGeocoding;
-
-
-
+window.testAddressGeocoding = testAddressGeocoding;
