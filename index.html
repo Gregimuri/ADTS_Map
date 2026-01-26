@@ -59,37 +59,6 @@
             50% { opacity: 0.5; transform: scale(1.2); }
             100% { opacity: 1; transform: scale(1); }
         }
-        
-        /* Стиль для уведомлений */
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            background: #3498db;
-            color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 3000;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.3s ease;
-            max-width: 400px;
-            word-wrap: break-word;
-        }
-        
-        .notification.success {
-            background: #2ecc71;
-        }
-        
-        .notification.error {
-            background: #e74c3c;
-        }
-        
-        .notification.warning {
-            background: #f39c12;
-        }
     </style>
 </head>
 <body>
@@ -149,7 +118,7 @@
             </div>
             
             <!-- Геокодирование -->
-            <div class="geocoding-controls">
+            <div class="geocoding-controls" style="padding: 0 20px 15px;">
                 <h4 style="color: white; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-search-location"></i> Геокодирование
                 </h4>
@@ -249,7 +218,7 @@
             <!-- Индикатор геокодирования -->
             <div id="geocoding-indicator" class="geocoding-indicator" onclick="showGeocodingStats()" style="display: none;">
                 <div class="pulse"></div>
-                <span>Геокодирование...</span>
+                <span id="geocoding-indicator-text">Геокодирование...</span>
             </div>
         </div>
     </div>
@@ -272,5 +241,35 @@
     
     <!-- Приложение -->
     <script src="app.js"></script>
+    
+    <script>
+        // Управление индикатором геокодирования
+        function updateGeocodingIndicator(active, queueSize = 0) {
+            const indicator = document.getElementById('geocoding-indicator');
+            const textElement = document.getElementById('geocoding-indicator-text');
+            
+            if (!indicator || !textElement) return;
+            
+            if (active || queueSize > 0) {
+                indicator.style.display = 'flex';
+                if (active) {
+                    textElement.textContent = 'Геокодирование...';
+                } else {
+                    textElement.textContent = `В очереди: ${queueSize}`;
+                }
+            } else {
+                indicator.style.display = 'none';
+            }
+        }
+        
+        // Мониторим очередь геокодирования
+        setInterval(() => {
+            if (window.geocodingSystem) {
+                const queueSize = window.geocodingSystem.queue.length;
+                const isActive = window.geocodingSystem.processing;
+                updateGeocodingIndicator(isActive, queueSize);
+            }
+        }, 1000);
+    </script>
 </body>
 </html>
