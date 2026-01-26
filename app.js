@@ -1,5 +1,3 @@
-[file name]: app.js
-[file content begin]
 // ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 let map;
 let markerCluster;
@@ -13,16 +11,9 @@ let activeFilters = {
 
 let updateInterval;
 let geocodingQueue = [];
-let isGeocoding = false;
-let geocodingCache = {};
-let geocodingStats = {
-    total: 0,
-    cached: 0,
-    queued: 0,
-    processing: 0,
-    success: 0,
-    failed: 0
-};
+let isGeocodingActive = false;
+let geocodingCache = new Map();
+let markersMap = new Map(); // Для быстрого доступа к маркерам по ID
 
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ==========
 document.addEventListener('DOMContentLoaded', function() {
@@ -69,362 +60,554 @@ function initMap() {
     }).addTo(map);
 }
 
-// ========== УЛУЧШЕННОЕ ГЕОКОДИРОВАНИЕ ==========
-async function loadGeocodingCache() {
+// ========== СИСТЕМА ГЕОКОДИРОВАНИЯ ==========
+
+// Загрузка кэша геокодирования из localStorage
+function loadGeocodingCache() {
     try {
         const cached = localStorage.getItem('geocoding_cache');
         if (cached) {
-            geocodingCache = JSON.parse(cached);
-            console.log(`Загружен кэш геокодирования: ${Object.keys(geocodingCache).length} записей`);
+            const data = JSON.parse(cached);
+            const cacheTime = data.timestamp || 0;
+            const cacheDays = CONFIG.GEOCODING.cacheDays || 30;
+            const maxAge = cacheDays * 24 * 60 * 60 * 1000;
+            
+            if (Date.now() - cacheTime < maxAge) {
+                geocodingCache = new Map(Object.entries(data.cache || {}));
+                console.log(`Загружен кэш геокодирования: ${geocodingCache.size} записей`);
+            } else {
+                console.log('Кэш геокодирования устарел, очищаем...');
+                localStorage.removeItem('geocoding_cache');
+            }
         }
     } catch (error) {
-        console.error('Ошибка загрузки кэша:', error);
+        console.error('Ошибка загрузки кэша геокодирования:', error);
     }
 }
 
+// Сохранение кэша геокодирования в localStorage
 function saveGeocodingCache() {
     try {
-        localStorage.setItem('geocoding_cache', JSON.stringify(geocodingCache));
-        console.log(`Кэш сохранен: ${Object.keys(geocodingCache).length} записей`);
+        const cacheData = {
+            cache: Object.fromEntries(geocodingCache),
+            timestamp: Date.now()
+        };
+        localStorage.setItem('geocoding_cache', JSON.stringify(cacheData));
     } catch (error) {
-        console.error('Ошибка сохранения кэша:', error);
+        console.error('Ошибка сохранения кэша геокодирования:', error);
     }
 }
 
-function normalizeAddressForGeocoding(address) {
+// Нормализация адреса (адаптированная из smart_geocoder.py)
+function normalizeAddress(address, region = '') {
     if (!address) return '';
     
-    // Основная нормализация
-    let normalized = address
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .replace(/\([^)]*\)/g, '') // Удаляем комментарии в скобках
-        .replace(/\d{6},?\s*/g, '') // Удаляем почтовые индексы
-        .replace(/\b(торг\.? ?точка|тт|магазин|здание|помещ\.?)\b/g, '')
-        .replace(/[.,]+\s*/g, ', ')
-        .trim();
+    let cleanAddress = address.toString().trim();
     
-    // Стандартизируем сокращения
-    const abbreviations = {
-        'ул\.': 'ул',
-        'улица': 'ул',
-        'пр\.': 'пр-кт',
-        'проспект': 'пр-кт',
-        'пер\.': 'пер',
-        'переулок': 'пер',
-        'д\.': 'д',
-        'дом': 'д',
-        'г\.': 'г',
-        'город': 'г',
-        'обл\.': 'обл',
-        'область': 'обл',
-        'респ\.': 'респ',
-        'республика': 'респ',
-        'край': 'край'
-    };
+    // Удаляем почтовый индекс
+    cleanAddress = cleanAddress.replace(/^\d{6},?\s*/, '');
+    cleanAddress = cleanAddress.replace(/,\s*\d{6}$/, '');
     
-    Object.keys(abbreviations).forEach(abbr => {
-        const regex = new RegExp(`\\b${abbr}\\b`, 'gi');
-        normalized = normalized.replace(regex, abbreviations[abbr]);
+    // Удаляем текст в скобках
+    cleanAddress = cleanAddress.replace(/\([^)]*\)/g, '');
+    
+    // Удаляем специальные пометки
+    const stopWords = [
+        'нас. пункт', 'торговая точка', 'торг точка', 'тт', 'магазин',
+        'здание', 'помещение', 'пом.', 'владение', 'влад.', 'корп.', 'стр.'
+    ];
+    
+    stopWords.forEach(word => {
+        const regex = new RegExp(word, 'gi');
+        cleanAddress = cleanAddress.replace(regex, '');
     });
     
-    // Убираем лишние запятые
-    normalized = normalized.replace(/,+/g, ',')
-        .replace(/^,/, '')
-        .replace(/,$/, '')
-        .trim();
-    
-    return normalized;
-}
-
-function getAddressKey(address, region = '') {
-    // Создаем ключ для кэширования
-    const key = `${normalizeAddressForGeocoding(address)}|${region}`.toLowerCase();
-    return key.replace(/\s+/g, ' ').trim();
-}
-
-async function geocodeAddress(address, region = '') {
-    const cacheKey = getAddressKey(address, region);
-    
-    // Проверяем кэш
-    if (geocodingCache[cacheKey]) {
-        const cached = geocodingCache[cacheKey];
-        // Проверяем срок действия кэша (30 дней)
-        if (Date.now() - cached.timestamp < 30 * 24 * 60 * 60 * 1000) {
-            geocodingStats.cached++;
-            return cached.coords;
-        }
-    }
-    
-    // Если в кэше нет, добавляем в очередь для фонового геокодирования
-    if (!geocodingQueue.some(item => item.key === cacheKey)) {
-        geocodingQueue.push({
-            key: cacheKey,
-            address: address,
-            region: region,
-            timestamp: Date.now()
-        });
-        geocodingStats.queued++;
-        updateGeocodingStatus();
-    }
-    
-    // Возвращаем приблизительные координаты по региону
-    return getEstimatedCoordinates(region);
-}
-
-function getEstimatedCoordinates(region = '') {
-    // Координаты по регионам России
-    const regionCoordinates = {
-        // Центральный федеральный округ
-        'москва': { lat: 55.7558, lng: 37.6173, radius: 0.2 },
-        'московская': { lat: 55.7539, lng: 37.6208, radius: 1.0 },
-        'тульская': { lat: 54.1931, lng: 37.6173, radius: 1.0 },
-        'брянская': { lat: 53.2434, lng: 34.3634, radius: 1.0 },
-        'владимирская': { lat: 56.1291, lng: 40.4066, radius: 1.0 },
+    // Стандартизируем сокращения
+    const replacements = {
+        // Регионы
+        'республика': 'респ',
+        'область': 'обл',
+        'автономный округ': 'ао',
+        'край': 'край',
         
-        // Северо-Западный федеральный округ
-        'санкт-петербург': { lat: 59.9343, lng: 30.3351, radius: 0.2 },
-        'ленинградская': { lat: 59.9343, lng: 30.3351, radius: 1.0 },
-        'архангельская': { lat: 64.5401, lng: 40.5433, radius: 2.0 },
-        'карелия': { lat: 61.7850, lng: 34.3468, radius: 2.0 },
+        // Населенные пункты
+        'город': 'г',
+        'поселок': 'п',
+        'село': 'с',
+        'деревня': 'д',
         
-        // Приволжский федеральный округ
-        'нижегородская': { lat: 56.3269, lng: 44.0065, radius: 1.5 },
-        'татарстан': { lat: 55.7944, lng: 49.1115, radius: 1.5 },
-        'башкортостан': { lat: 54.7351, lng: 55.9587, radius: 1.5 },
-        'самарская': { lat: 53.1959, lng: 50.1002, radius: 1.5 },
+        // Улицы
+        'улица': 'ул',
+        'проспект': 'пр-кт',
+        'переулок': 'пер',
+        'бульвар': 'б-р',
+        'шоссе': 'ш',
         
-        // Сибирский федеральный округ
-        'алтайский': { lat: 53.3481, lng: 83.7794, radius: 2.0 },
-        'красноярский': { lat: 56.0153, lng: 92.8932, radius: 3.0 },
-        'кемеровская': { lat: 55.3547, lng: 86.0873, radius: 1.5 },
-        'иркутская': { lat: 52.2864, lng: 104.2807, radius: 2.0 },
-        
-        // Уральский федеральный округ
-        'свердловская': { lat: 56.8389, lng: 60.6057, radius: 1.5 },
-        'челябинская': { lat: 55.1644, lng: 61.4368, radius: 1.5 },
-        'тюменская': { lat: 57.1530, lng: 65.5343, radius: 2.0 },
-        
-        // Другие регионы
-        'ростовская': { lat: 47.2224, lng: 39.7187, radius: 1.5 },
-        'краснодарский': { lat: 45.0355, lng: 38.9753, radius: 1.5 },
-        'волгоградская': { lat: 48.7080, lng: 44.5133, radius: 1.5 }
+        // Номера
+        'дом': 'д',
+        'корпус': 'к',
+        'строение': 'стр',
+        'литер': 'лит'
     };
     
-    // Ищем регион в списке
-    let baseCoords = { lat: 55.7558, lng: 37.6173, radius: 2.0 }; // Москва по умолчанию
+    Object.entries(replacements).forEach(([full, short]) => {
+        const regex = new RegExp(`\\b${full}\\b`, 'gi');
+        cleanAddress = cleanAddress.replace(regex, short);
+    });
     
-    if (region) {
-        const regionLower = region.toLowerCase();
-        for (const [key, coords] of Object.entries(regionCoordinates)) {
-            if (regionLower.includes(key)) {
-                baseCoords = coords;
-                break;
-            }
-        }
+    // Удаляем лишние пробелы и запятые
+    cleanAddress = cleanAddress.replace(/\s+/g, ' ');
+    cleanAddress = cleanAddress.replace(/,\s*,/g, ',');
+    cleanAddress = cleanAddress.replace(/^\s+|\s+$/g, '');
+    cleanAddress = cleanAddress.replace(/^,|,$/g, '');
+    
+    // Добавляем регион если указан
+    if (region && !cleanAddress.toLowerCase().includes(region.toLowerCase())) {
+        cleanAddress = `${cleanAddress}, ${region}`;
     }
     
-    // Генерируем случайные координаты в радиусе региона
-    const angle = Math.random() * Math.PI * 2;
-    const radius = Math.random() * baseCoords.radius;
+    // Добавляем страну
+    if (!cleanAddress.toLowerCase().includes('россия')) {
+        cleanAddress = `${cleanAddress}, Россия`;
+    }
     
-    const lat = baseCoords.lat + (Math.cos(angle) * radius) / 111; // 1 градус ≈ 111 км
-    const lng = baseCoords.lng + (Math.sin(angle) * radius) / (111 * Math.cos(baseCoords.lat * Math.PI / 180));
-    
-    return {
-        lat: parseFloat(lat.toFixed(6)),
-        lng: parseFloat(lng.toFixed(6)),
-        accuracy: 'estimated',
-        source: 'estimation',
-        timestamp: Date.now()
-    };
+    return cleanAddress.trim();
 }
 
-async function processGeocodingQueue() {
-    if (isGeocoding || geocodingQueue.length === 0) {
-        return;
-    }
-    
-    isGeocoding = true;
-    geocodingStats.processing = geocodingQueue.length;
-    
-    console.log(`Начинаю фоновое геокодирование ${geocodingQueue.length} адресов...`);
-    
-    // Создаем копию очереди для обработки
-    const queueCopy = [...geocodingQueue];
-    geocodingQueue = [];
-    
-    // Ограничиваем количество одновременных запросов
-    const BATCH_SIZE = 3;
-    const DELAY_BETWEEN_REQUESTS = 1000;
-    
-    for (let i = 0; i < queueCopy.length; i += BATCH_SIZE) {
-        const batch = queueCopy.slice(i, i + BATCH_SIZE);
-        
-        // Обрабатываем батч параллельно
-        const promises = batch.map(async (item) => {
-            try {
-                // Пробуем геокодировать через OpenStreetMap (без API ключа)
-                const coords = await geocodeWithOSM(item.address, item.region);
-                
-                if (coords) {
-                    // Сохраняем в кэш
-                    geocodingCache[item.key] = {
-                        coords: {
-                            lat: coords.lat,
-                            lng: coords.lng,
-                            accuracy: 'exact',
-                            source: 'osm',
-                            timestamp: Date.now()
-                        },
-                        timestamp: Date.now()
-                    };
-                    
-                    geocodingStats.success++;
-                    
-                    // Обновляем точки на карте с новыми координатами
-                    updatePointsWithNewCoordinates(item.key, coords);
-                    
-                    return true;
-                }
-            } catch (error) {
-                console.warn('Ошибка геокодирования:', error);
-            }
-            
-            geocodingStats.failed++;
-            return false;
-        });
-        
-        // Ждем завершения батча
-        await Promise.all(promises);
-        
-        // Сохраняем кэш
-        saveGeocodingCache();
-        updateGeocodingStatus();
-        
-        // Задержка между батчами
-        if (i + BATCH_SIZE < queueCopy.length) {
-            await sleep(DELAY_BETWEEN_REQUESTS);
-        }
-    }
-    
-    isGeocoding = false;
-    console.log('Фоновое геокодирование завершено');
+// Генерация ключа для кэша
+function getGeocodingCacheKey(address, region = '') {
+    const normalized = normalizeAddress(address, region).toLowerCase();
+    return btoa(encodeURIComponent(normalized)).replace(/[^a-zA-Z0-9]/g, '');
 }
 
-async function geocodeWithOSM(address, region = '') {
-    try {
-        // Нормализуем адрес для OSM
-        let query = normalizeAddressForGeocoding(address);
-        if (region) {
-            query += `, ${region}`;
-        }
-        query += ', Россия';
+// Получение координат из кэша
+function getCachedCoordinates(address, region = '') {
+    if (!CONFIG.GEOCODING.enabled) return null;
+    
+    const cacheKey = getGeocodingCacheKey(address, region);
+    const cached = geocodingCache.get(cacheKey);
+    
+    if (cached) {
+        // Проверяем срок действия кэша
+        const cacheDays = CONFIG.GEOCODING.cacheDays || 30;
+        const maxAge = cacheDays * 24 * 60 * 60 * 1000;
         
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=ru&accept-language=ru`;
-        
-        const response = await fetch(url, {
-            headers: {
-                'User-Agent': 'TTMapApp/1.0',
-                'Referer': 'https://tt-map.example.com',
-                'Accept-Language': 'ru-RU,ru;q=0.9'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data && data.length > 0) {
+        if (Date.now() - cached.timestamp < maxAge) {
             return {
-                lat: parseFloat(data[0].lat),
-                lng: parseFloat(data[0].lon),
-                display_name: data[0].display_name
+                lat: cached.lat,
+                lng: cached.lng,
+                source: cached.source || 'cache',
+                isExact: cached.isExact !== false
             };
+        } else {
+            // Удаляем устаревшую запись
+            geocodingCache.delete(cacheKey);
         }
-    } catch (error) {
-        console.error('OSM геокодирование ошибка:', error);
     }
     
     return null;
 }
 
-function updatePointsWithNewCoordinates(cacheKey, exactCoords) {
-    // Находим все точки с приблизительными координатами для этого адреса
-    allPoints.forEach(point => {
-        if (point.address && getAddressKey(point.address, point.region) === cacheKey) {
-            if (point.coordinates && point.coordinates.includes('estimated')) {
-                // Обновляем координаты
-                point.lat = exactCoords.lat;
-                point.lng = exactCoords.lng;
-                point.coordinates = `${exactCoords.lat},${exactCoords.lng}`;
-                point.isMock = false;
-                point.coordinatesSource = 'osm';
-                point.coordinatesUpdated = new Date().toISOString();
+// Сохранение координат в кэш
+function cacheCoordinates(address, region = '', lat, lng, source = 'unknown', isExact = true) {
+    if (!CONFIG.GEOCODING.enabled) return;
+    
+    const cacheKey = getGeocodingCacheKey(address, region);
+    geocodingCache.set(cacheKey, {
+        lat: lat,
+        lng: lng,
+        source: source,
+        isExact: isExact,
+        timestamp: Date.now(),
+        address: address,
+        region: region
+    });
+    
+    // Периодически сохраняем кэш
+    if (geocodingCache.size % 5 === 0) {
+        saveGeocodingCache();
+    }
+}
+
+// Геокодирование через Яндекс
+async function geocodeYandex(address, region = '') {
+    if (!CONFIG.GEOCODING.enabled) return null;
+    
+    try {
+        const cleanAddress = normalizeAddress(address, region);
+        const encodedAddress = encodeURIComponent(cleanAddress);
+        
+        // Используем публичный API Яндекс.Карт
+        const url = `https://geocode-maps.yandex.ru/1.x/?format=json&geocode=${encodedAddress}&results=1`;
+        
+        // Ждем перед запросом (уважаем лимиты)
+        await new Promise(resolve => setTimeout(resolve, CONFIG.GEOCODING.delay.yandex || 300));
+        
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'TTMapApp/1.0',
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data.response && 
+                data.response.GeoObjectCollection && 
+                data.response.GeoObjectCollection.featureMember && 
+                data.response.GeoObjectCollection.featureMember.length > 0) {
                 
-                console.log(`Обновлены координаты для: ${point.name || point.address}`);
+                const pos = data.response.GeoObjectCollection.featureMember[0]
+                    .GeoObject.Point.pos.split(' ');
                 
-                // Обновляем маркер на карте
-                updateMarkerCoordinates(point);
+                const lon = parseFloat(pos[0]);
+                const lat = parseFloat(pos[1]);
+                
+                return { lat, lng: lon, source: 'yandex', isExact: true };
             }
         }
-    });
+    } catch (error) {
+        console.warn('Ошибка геокодирования Яндекс:', error);
+    }
+    
+    return null;
 }
 
-function updateMarkerCoordinates(point) {
-    // Находим и обновляем маркер на карте
-    markerCluster.eachLayer(function(layer) {
-        if (layer.options && layer.options.id === point.id) {
+// Геокодирование через Nominatim (OpenStreetMap)
+async function geocodeNominatim(address, region = '') {
+    if (!CONFIG.GEOCODING.enabled) return null;
+    
+    try {
+        const cleanAddress = normalizeAddress(address, region);
+        
+        // Ждем перед запросом (уважаем лимиты OSM)
+        await new Promise(resolve => setTimeout(resolve, CONFIG.GEOCODING.delay.nominatim || 1000));
+        
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cleanAddress)}&limit=1&countrycodes=ru&accept-language=ru`;
+        
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'TTMapApp/1.0',
+                'Accept': 'application/json',
+                'Referer': 'https://tt-map.local/'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            if (data && data.length > 0) {
+                const lat = parseFloat(data[0].lat);
+                const lon = parseFloat(data[0].lon);
+                
+                return { lat, lng: lon, source: 'nominatim', isExact: true };
+            }
+        }
+    } catch (error) {
+        console.warn('Ошибка геокодирования Nominatim:', error);
+    }
+    
+    return null;
+}
+
+// Основная функция геокодирования с приоритетами
+async function geocodeAddress(address, region = '', pointId = null) {
+    if (!CONFIG.GEOCODING.enabled || !address) {
+        return getRandomCoordinate(address, region);
+    }
+    
+    // 1. Проверяем кэш
+    const cached = getCachedCoordinates(address, region);
+    if (cached) {
+        console.log(`Координаты из кэша для: ${address.substring(0, 50)}...`);
+        return cached;
+    }
+    
+    // 2. Сначала Яндекс
+    let result = await geocodeYandex(address, region);
+    
+    // 3. Если Яндекс не нашел, пробуем Nominatim
+    if (!result) {
+        result = await geocodeNominatim(address, region);
+    }
+    
+    // 4. Если нашли точные координаты, сохраняем в кэш
+    if (result && result.isExact) {
+        cacheCoordinates(address, region, result.lat, result.lng, result.source, true);
+        
+        // Если у нас есть ID точки, обновляем ее координаты
+        if (pointId) {
+            updatePointCoordinates(pointId, result.lat, result.lng, result.source);
+        }
+    }
+    
+    // 5. Если не нашли, возвращаем случайные координаты
+    if (!result) {
+        result = getRandomCoordinate(address, region);
+        cacheCoordinates(address, region, result.lat, result.lng, 'random', false);
+    }
+    
+    return result;
+}
+
+// Обновление координат точки
+function updatePointCoordinates(pointId, lat, lng, source = 'unknown') {
+    const pointIndex = allPoints.findIndex(p => p.id === pointId);
+    if (pointIndex !== -1) {
+        const oldPoint = allPoints[pointIndex];
+        
+        // Обновляем точку
+        allPoints[pointIndex] = {
+            ...oldPoint,
+            lat: lat,
+            lng: lng,
+            coordinates: `${lat},${lng}`,
+            geocodingSource: source,
+            isMock: false,
+            geocodedAt: new Date().toISOString()
+        };
+        
+        // Обновляем маркер на карте
+        updateMarkerOnMap(pointId, allPoints[pointIndex]);
+        
+        // Обновляем статистику
+        updateStatistics();
+        
+        console.log(`Обновлены координаты точки ${pointId}: ${lat}, ${lng} (источник: ${source})`);
+        
+        return true;
+    }
+    
+    return false;
+}
+
+// Обновление маркера на карте
+function updateMarkerOnMap(pointId, point) {
+    // Находим маркер в кластере
+    markerCluster.eachLayer((layer) => {
+        if (layer.options && layer.options.pointId === pointId) {
+            // Удаляем старый маркер
+            markerCluster.removeLayer(layer);
+            
             // Создаем новый маркер с обновленными координатами
             const newMarker = createMarker(point);
-            
-            // Удаляем старый и добавляем новый
-            markerCluster.removeLayer(layer);
             markerCluster.addLayer(newMarker);
             
-            // Показываем уведомление о перемещении
-            showNotification(`Координаты уточнены: ${point.name || 'Точка'}`, 'success');
+            // Обновляем карту
+            markersMap.set(pointId, newMarker);
+            
+            return true;
         }
     });
 }
 
-function updateGeocodingStatus() {
-    const statusElement = document.getElementById('geocoding-status');
-    if (!statusElement) {
-        // Создаем элемент статуса если его нет
-        const sidebar = document.querySelector('.sidebar');
-        const statusDiv = document.createElement('div');
-        statusDiv.id = 'geocoding-status';
-        statusDiv.className = 'geocoding-status';
-        statusDiv.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-sync-alt fa-spin"></i>
-                <span>Геокодирование...</span>
-                <span id="geocoding-progress">0/0</span>
-            </div>
-        `;
-        sidebar.appendChild(statusDiv);
+// Получение случайных координат по региону
+function getRandomCoordinate(address, region = '') {
+    // Координаты по регионам (расширенный список)
+    const regionCoords = {
+        'Москва': { lat: 55.7558, lng: 37.6173, radius: 0.1 },
+        'Московская': { lat: 55.7558, lng: 37.6173, radius: 0.5 },
+        'Санкт-Петербург': { lat: 59.9343, lng: 30.3351, radius: 0.1 },
+        'Ленинградская': { lat: 59.9343, lng: 30.3351, radius: 0.5 },
+        'Алтайский': { lat: 53.3481, lng: 83.7794, radius: 1.0 },
+        'Архангельская': { lat: 64.5401, lng: 40.5433, radius: 1.0 },
+        'Астраханская': { lat: 46.3497, lng: 48.0408, radius: 1.0 },
+        'Владимирская': { lat: 56.1291, lng: 40.4066, radius: 0.5 },
+        'Волгоградская': { lat: 48.7071, lng: 44.5169, radius: 0.5 },
+        'Воронежская': { lat: 51.6608, lng: 39.2003, radius: 0.5 },
+        'Екатеринбург': { lat: 56.8389, lng: 60.6057, radius: 0.1 },
+        'Иркутская': { lat: 52.2864, lng: 104.2807, radius: 1.0 },
+        'Казань': { lat: 55.7961, lng: 49.1064, radius: 0.1 },
+        'Калининградская': { lat: 54.7104, lng: 20.4522, radius: 0.3 },
+        'Калужская': { lat: 54.5136, lng: 36.2614, radius: 0.5 },
+        'Кемеровская': { lat: 55.3547, lng: 86.0873, radius: 0.5 },
+        'Краснодарский': { lat: 45.0355, lng: 38.9753, radius: 0.5 },
+        'Красноярский': { lat: 56.0153, lng: 92.8932, radius: 1.0 },
+        'Нижегородская': { lat: 56.2965, lng: 43.9361, radius: 0.5 },
+        'Новосибирская': { lat: 55.0084, lng: 82.9357, radius: 0.5 },
+        'Омская': { lat: 54.9893, lng: 73.3682, radius: 0.5 },
+        'Оренбургская': { lat: 51.7682, lng: 55.0968, radius: 0.5 },
+        'Пермский': { lat: 58.0105, lng: 56.2502, radius: 0.5 },
+        'Ростовская': { lat: 47.2224, lng: 39.7189, radius: 0.5 },
+        'Самарская': { lat: 53.1959, lng: 50.1002, radius: 0.5 },
+        'Саратовская': { lat: 51.5924, lng: 45.9608, radius: 0.5 },
+        'Свердловская': { lat: 56.8389, lng: 60.6057, radius: 0.5 },
+        'Татарстан': { lat: 55.7961, lng: 49.1064, radius: 0.5 },
+        'Тюменская': { lat: 57.1530, lng: 65.5343, radius: 0.5 },
+        'Ульяновская': { lat: 54.3142, lng: 48.4031, radius: 0.5 },
+        'Челябинская': { lat: 55.1644, lng: 61.4368, radius: 0.5 },
+        'Ярославская': { lat: 57.6261, lng: 39.8845, radius: 0.5 },
+        'default': { lat: 55.7558, lng: 37.6173, radius: 2.0 }
+    };
+    
+    let baseLat = 55.7558;
+    let baseLng = 37.6173;
+    let radius = 2.0;
+    
+    // Ищем регион в адресе или переданном регионе
+    const searchText = (region || address || '').toLowerCase();
+    
+    for (const [key, coords] of Object.entries(regionCoords)) {
+        if (searchText.includes(key.toLowerCase())) {
+            baseLat = coords.lat;
+            baseLng = coords.lng;
+            radius = coords.radius;
+            break;
+        }
     }
     
-    const progressElement = document.getElementById('geocoding-progress');
-    if (progressElement) {
-        const total = geocodingStats.queued + geocodingStats.processing;
-        const processed = geocodingStats.success + geocodingStats.failed;
-        progressElement.textContent = `${processed}/${total}`;
+    // Генерируем случайные координаты в радиусе региона
+    const randomLat = baseLat + (Math.random() - 0.5) * radius;
+    const randomLng = baseLng + (Math.random() - 0.5) * radius * 2;
+    
+    return {
+        lat: randomLat,
+        lng: randomLng,
+        source: 'random',
+        isExact: false,
+        isMock: true
+    };
+}
+
+// Добавление задачи в очередь геокодирования
+function addToGeocodingQueue(point) {
+    if (!CONFIG.GEOCODING.enabled || !point.address || point.geocodingQueued) {
+        return;
+    }
+    
+    // Проверяем, есть ли уже точные координаты
+    if (point.lat && point.lng && !point.isMock) {
+        return;
+    }
+    
+    // Помечаем точку как добавленную в очередь
+    point.geocodingQueued = true;
+    
+    geocodingQueue.push({
+        pointId: point.id,
+        address: point.address,
+        region: point.region,
+        timestamp: Date.now(),
+        priority: point.isMock ? 1 : 0 // Приоритет для точек с примерными координатами
+    });
+    
+    console.log(`Добавлено в очередь геокодирования: ${point.address.substring(0, 50)}...`);
+    
+    // Запускаем обработчик очереди если он не активен
+    if (!isGeocodingActive && CONFIG.GEOCODING.autoUpdate) {
+        processGeocodingQueue();
     }
 }
 
+// Обработчик очереди геокодирования
+async function processGeocodingQueue() {
+    if (isGeocodingActive || geocodingQueue.length === 0) {
+        return;
+    }
+    
+    isGeocodingActive = true;
+    
+    try {
+        // Сортируем очередь по приоритету (сначала точки с примерными координатами)
+        geocodingQueue.sort((a, b) => b.priority - a.priority);
+        
+        // Берем первые N задач для одновременной обработки
+        const maxConcurrent = CONFIG.GEOCODING.maxConcurrent || 3;
+        const tasks = geocodingQueue.splice(0, Math.min(maxConcurrent, geocodingQueue.length));
+        
+        console.log(`Обрабатываю ${tasks.length} задач геокодирования...`);
+        
+        // Обрабатываем задачи параллельно
+        await Promise.allSettled(
+            tasks.map(async (task) => {
+                try {
+                    const result = await geocodeAddress(task.address, task.region, task.pointId);
+                    
+                    if (result && result.isExact) {
+                        console.log(`✅ Геокодирование успешно: ${task.address.substring(0, 50)}...`);
+                        
+                        // Обновляем уведомление
+                        showNotification(`Уточнены координаты для: ${task.address.substring(0, 30)}...`, 'success', 3000);
+                    }
+                } catch (error) {
+                    console.warn(`Ошибка геокодирования для ${task.pointId}:`, error);
+                    
+                    // Возвращаем задачу в очередь с пониженным приоритетом
+                    task.priority = -1;
+                    task.retryCount = (task.retryCount || 0) + 1;
+                    
+                    if (task.retryCount <= 3) {
+                        geocodingQueue.push(task);
+                    }
+                }
+            })
+        );
+        
+    } catch (error) {
+        console.error('Ошибка обработки очереди геокодирования:', error);
+    } finally {
+        isGeocodingActive = false;
+        
+        // Если в очереди еще есть задачи, обрабатываем следующую партию
+        if (geocodingQueue.length > 0) {
+            setTimeout(() => {
+                processGeocodingQueue();
+            }, 2000); // Пауза между партиями
+        } else {
+            console.log('Очередь геокодирования пуста');
+            
+            // Финальное сохранение кэша
+            saveGeocodingCache();
+            
+            // Обновляем статистику
+            updateGeocodingStats();
+        }
+    }
+}
+
+// Запуск обработчика геокодирования в фоне
 function setupGeocodingWorker() {
-    // Запускаем периодическую проверку очереди геокодирования
+    if (!CONFIG.GEOCODING.enabled) return;
+    
+    // Проверяем очередь каждые 30 секунд
     setInterval(() => {
-        if (geocodingQueue.length > 0 && !isGeocoding) {
+        if (geocodingQueue.length > 0 && !isGeocodingActive) {
             processGeocodingQueue();
         }
-    }, 10000); // Проверяем каждые 10 секунд
+    }, 30000);
     
-    // Также запускаем сразу если есть очередь
-    if (geocodingQueue.length > 0) {
-        setTimeout(() => processGeocodingQueue(), 5000);
-    }
+    console.log('Фоновое геокодирование активировано');
+}
+
+// Обновление статистики геокодирования
+function updateGeocodingStats() {
+    const totalPoints = allPoints.length;
+    const exactCoords = allPoints.filter(p => p.lat && p.lng && !p.isMock).length;
+    const mockCoords = allPoints.filter(p => p.isMock).length;
+    const noCoords = allPoints.filter(p => !p.lat || !p.lng).length;
+    
+    const statsElement = document.getElementById('geocoding-stats');
+    if (!statsElement) return;
+    
+    statsElement.innerHTML = `
+        <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+            <div style="font-size: 12px; color: #95a5a6; margin-bottom: 5px;">
+                <i class="fas fa-map-marker-alt"></i> Статистика координат:
+            </div>
+            <div style="display: flex; gap: 15px; font-size: 11px;">
+                <div>
+                    <span style="color: #2ecc71;">●</span> Точные: ${exactCoords}
+                </div>
+                <div>
+                    <span style="color: #f39c12;">●</span> Приблизительные: ${mockCoords}
+                </div>
+                <div>
+                    <span style="color: #e74c3c;">●</span> Без координат: ${noCoords}
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // ========== ЗАГРУЗКА ДАННЫХ ИЗ GOOGLE SHEETS ==========
@@ -443,8 +626,8 @@ async function loadData() {
         // 2. Обрабатываем данные
         allPoints = processData(data);
         
-        // 3. Добавляем координаты (с улучшенным геокодированием)
-        allPoints = await addCoordinatesWithGeocoding(allPoints);
+        // 3. Добавляем координаты (быстро, с использованием кэша)
+        allPoints = await addCoordinatesFast(allPoints);
         
         // 4. Обновляем интерфейс
         updateFilters();
@@ -452,8 +635,10 @@ async function loadData() {
         updateLegend();
         showPointsOnMap();
         
-        // 5. Запускаем фоновое геокодирование для уточнения координат
-        startBackgroundGeocoding();
+        // 5. Начинаем фоновое геокодирование для уточнения координат
+        if (CONFIG.GEOCODING.enabled && CONFIG.GEOCODING.autoUpdate) {
+            startBackgroundGeocoding();
+        }
         
         // 6. Скрываем модальное окно
         closeModal();
@@ -471,8 +656,9 @@ async function loadData() {
     }
 }
 
-async function addCoordinatesWithGeocoding(points) {
-    console.log('Добавление координат с геокодированием для', points.length, 'точек...');
+// Быстрое добавление координат (с использованием кэша и случайных координат)
+async function addCoordinatesFast(points) {
+    console.log('Быстрое добавление координат для', points.length, 'точек...');
     
     const updatedPoints = [];
     
@@ -480,64 +666,41 @@ async function addCoordinatesWithGeocoding(points) {
         const point = points[i];
         
         // Показываем прогресс
-        if (i % 10 === 0) {
+        if (i % 20 === 0) {
             updateModal('Геокодирование', `Обработано ${i} из ${points.length} адресов...`);
         }
         
-        // Если есть адрес
-        if (point.address) {
-            try {
-                // Пытаемся получить координаты (из кэша или через геокодирование)
-                const coords = await geocodeAddress(point.address, point.region);
-                
-                if (coords) {
-                    point.lat = coords.lat;
-                    point.lng = coords.lng;
-                    point.coordinates = `${coords.lat},${coords.lng}`;
-                    point.coordinatesSource = coords.source;
-                    point.coordinatesAccuracy = coords.accuracy;
-                    point.coordinatesTimestamp = coords.timestamp;
-                    
-                    if (coords.accuracy === 'estimated') {
-                        point.isMock = true;
-                        point.coordinatesStatus = 'estimated';
-                    } else {
-                        point.isMock = false;
-                        point.coordinatesStatus = 'exact';
-                    }
-                } else {
-                    // Если даже приблизительные координаты не получены
-                    point.lat = getRandomCoordinate('lat', point.region);
-                    point.lng = getRandomCoordinate('lng', point.region);
-                    point.coordinates = `${point.lat},${point.lng}`;
-                    point.isMock = true;
-                    point.coordinatesStatus = 'random';
-                    point.coordinatesSource = 'random';
-                }
-                
-            } catch (error) {
-                console.warn('Ошибка геокодирования:', error);
-                point.lat = getRandomCoordinate('lat', point.region);
-                point.lng = getRandomCoordinate('lng', point.region);
-                point.coordinates = `${point.lat},${point.lng}`;
-                point.isMock = true;
-                point.coordinatesStatus = 'error';
-                point.coordinatesSource = 'error';
-            }
-        } else {
-            // Случайные координаты
-            point.lat = getRandomCoordinate('lat', point.region);
-            point.lng = getRandomCoordinate('lng', point.region);
-            point.coordinates = `${point.lat},${point.lng}`;
-            point.isMock = true;
-            point.coordinatesStatus = 'no_address';
-            point.coordinatesSource = 'random';
+        // Если уже есть координаты и они точные, используем их
+        if (point.lat && point.lng && !point.isMock) {
+            updatedPoints.push(point);
+            continue;
         }
         
-        // Добавляем уникальный ID если нет
-        if (!point.id) {
-            point.id = `point_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
+        // Проверяем кэш для быстрого доступа
+        if (point.address) {
+            const cached = getCachedCoordinates(point.address, point.region);
+            
+            if (cached && cached.isExact) {
+                // Используем точные координаты из кэша
+                point.lat = cached.lat;
+                point.lng = cached.lng;
+                point.coordinates = `${cached.lat},${cached.lng}`;
+                point.geocodingSource = cached.source;
+                point.isMock = false;
+                point.cached = true;
+                
+                updatedPoints.push(point);
+                continue;
+            }
         }
+        
+        // Если нет точных координат, используем случайные (для быстрого отображения)
+        const randomCoords = getRandomCoordinate(point.address, point.region);
+        point.lat = randomCoords.lat;
+        point.lng = randomCoords.lng;
+        point.coordinates = `${randomCoords.lat},${randomCoords.lng}`;
+        point.isMock = true;
+        point.geocodingSource = 'random_initial';
         
         updatedPoints.push(point);
     }
@@ -545,152 +708,33 @@ async function addCoordinatesWithGeocoding(points) {
     return updatedPoints;
 }
 
+// Запуск фонового геокодирования для уточнения координат
 function startBackgroundGeocoding() {
-    // Собираем адреса, которые нуждаются в уточнении
-    const addressesToRefine = allPoints.filter(point => 
-        point.address && 
-        point.coordinatesAccuracy === 'estimated' &&
-        !geocodingQueue.some(item => getAddressKey(point.address, point.region) === item.key)
+    if (!CONFIG.GEOCODING.enabled) return;
+    
+    console.log('Запуск фонового геокодирования для уточнения координат...');
+    
+    // Добавляем все точки с приблизительными координатами в очередь
+    const pointsToGeocode = allPoints.filter(p => 
+        p.address && 
+        (p.isMock || !p.lat || !p.lng)
     );
     
-    if (addressesToRefine.length > 0) {
-        console.log(`Найдено ${addressesToRefine.length} адресов для уточнения координат`);
-        
-        // Добавляем в очередь геокодирования
-        addressesToRefine.forEach(point => {
-            const cacheKey = getAddressKey(point.address, point.region);
-            geocodingQueue.push({
-                key: cacheKey,
-                address: point.address,
-                region: point.region,
-                timestamp: Date.now()
-            });
-        });
-        
-        geocodingStats.queued = geocodingQueue.length;
-        updateGeocodingStatus();
-        
-        // Запускаем обработку очереди
-        if (!isGeocoding) {
-            setTimeout(() => processGeocodingQueue(), 3000);
-        }
-    }
-}
-
-function getRandomCoordinate(type, region) {
-    // Используем улучшенную функцию из геокодирования
-    const estimated = getEstimatedCoordinates(region);
-    return type === 'lat' ? estimated.lat : estimated.lng;
-}
-
-// ========== ОСТАЛЬНОЙ КОД ОСТАЕТСЯ БЕЗ ИЗМЕНЕНИЙ ==========
-
-// ========== АЛЬТЕРНАТИВНЫЙ СПОСОБ ЗАГРУЗКИ ==========
-async function tryAlternativeLoad() {
-    try {
-        updateStatus('Пробуем альтернативный способ...');
-        
-        // Используем Google Sheets CSV экспорт
-        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv`;
-        
-        const response = await fetch(csvUrl);
-        const csvText = await response.text();
-        
-        // Парсим CSV
-        const rows = csvText.split('\n').filter(row => row.trim() !== '');
-        
-        if (rows.length < 2) {
-            throw new Error('Мало данных в CSV');
-        }
-        
-        // Первая строка - заголовки
-        const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        
-        // Данные
-        const points = [];
-        for (let i = 1; i < rows.length; i++) {
-            const row = rows[i].split(',').map(cell => cell.trim().replace(/"/g, ''));
-            const point = {};
-            
-            headers.forEach((header, index) => {
-                if (row[index]) {
-                    point[header] = row[index];
-                }
-            });
-            
-            if (point['Название ТТ']) {
-                points.push(point);
-            }
-        }
-        
-        allPoints = await addCoordinatesWithGeocoding(points);
-        
-        updateFilters();
-        updateStatistics();
-        updateLegend();
-        showPointsOnMap();
-        
-        // Запускаем фоновое геокодирование
-        startBackgroundGeocoding();
-        
-        updateStatus(`Загружено: ${allPoints.length} точек`);
-        showNotification('Данные загружены через CSV', 'success');
-        
-    } catch (error) {
-        console.error('Ошибка альтернативной загрузки:', error);
-        showNotification('Не удалось загрузить данные. Проверьте доступ к таблице.', 'error');
-        
-        // Показываем демо-данные для теста
-        showDemoData();
-    }
-}
-
-// ========== ЗАГРУЗКА ДАННЫХ КАК CSV ==========
-async function loadDataAsCSV() {
-    // Формируем URL для экспорта всей книги как CSV
-    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv&id=${CONFIG.SPREADSHEET_ID}`;
+    console.log(`Найдено ${pointsToGeocode.length} точек для уточнения координат`);
     
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const csvText = await response.text();
-        
-        // Простой парсинг CSV
-        const rows = csvText.split('\n').map(row => {
-            // Обрабатываем строки с запятыми внутри кавычек
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            
-            for (let i = 0; i < row.length; i++) {
-                const char = row[i];
-                
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ',' && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            
-            result.push(current.trim());
-            return result.map(cell => cell.replace(/^"|"$/g, ''));
-        }).filter(row => row.length > 1 && row.some(cell => cell.trim() !== ''));
-        
-        return rows;
-        
-    } catch (error) {
-        console.error('Ошибка загрузки CSV:', error);
-        return null;
+    pointsToGeocode.forEach(point => {
+        addToGeocodingQueue(point);
+    });
+    
+    // Запускаем обработку очереди
+    if (pointsToGeocode.length > 0 && !isGeocodingActive) {
+        setTimeout(() => {
+            processGeocodingQueue();
+        }, 3000); // Начинаем через 3 секунды после загрузки
     }
 }
 
-// ========== ОБРАБОТКА ДАННЫХ ==========
+// Обработка данных (без изменений, оставляем оригинальную функцию)
 function processData(rows) {
     if (!rows || rows.length < 2) return [];
     
@@ -741,151 +785,12 @@ function processData(rows) {
     return points;
 }
 
-function findColumnIndices(headers) {
-    const indices = {
-        name: -1,
-        region: -1,
-        address: -1,
-        status: -1,
-        manager: -1,
-        contractor: -1
-    };
-    
-    headers.forEach((header, index) => {
-        if (!header) return;
-        
-        const headerLower = header.toString().toLowerCase().trim();
-        
-        // Название
-        if (indices.name === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.name) {
-                if (headerLower.includes(name.toLowerCase())) {
-                    indices.name = index;
-                    break;
-                }
-            }
-        }
-        
-        // Регион
-        if (indices.region === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.region) {
-                if (headerLower.includes(name.toLowerCase())) {
-                    indices.region = index;
-                    break;
-                }
-            }
-        }
-        
-        // Адрес
-        if (indices.address === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.address) {
-                if (headerLower.includes(name.toLowerCase())) {
-                    indices.address = index;
-                    break;
-                }
-            }
-        }
-        
-        // Статус
-        if (indices.status === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.status) {
-                if (headerLower.includes(name.toLowerCase())) {
-                    indices.status = index;
-                    break;
-                }
-            }
-        }
-        
-        // Менеджер
-        if (indices.manager === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.manager) {
-                if (headerLower.includes(name.toLowerCase())) {
-                    indices.manager = index;
-                    break;
-                }
-            }
-        }
-        
-        // Подрядчик
-        if (indices.contractor === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.contractor) {
-                if (headerLower.includes(name.toLowerCase())) {
-                    indices.contractor = index;
-                    break;
-                }
-            }
-        }
-    });
-    
-    return indices;
-}
-
-// ========== ДЕМО-ДАННЫЕ ==========
-function showDemoData() {
-    console.log('Показываем демо-данные...');
-    
-    // Создаем демо-точки для теста
-    allPoints = [
-        {
-            id: 'demo_1',
-            name: 'Магнит №123',
-            region: 'Москва',
-            address: 'ул. Тверская, д. 1',
-            status: 'сдан',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            lat: 55.7570,
-            lng: 37.6145,
-            isMock: false,
-            coordinatesStatus: 'exact',
-            coordinatesSource: 'demo'
-        },
-        {
-            id: 'demo_2',
-            name: 'Магнит №124',
-            region: 'Московская обл.',
-            address: 'г. Химки, ул. Ленина, 25',
-            status: 'сдан',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            lat: 55.8890,
-            lng: 37.4450,
-            isMock: false,
-            coordinatesStatus: 'exact',
-            coordinatesSource: 'demo'
-        },
-        {
-            id: 'demo_3',
-            name: 'Басенджи',
-            region: 'Алтайский край',
-            address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
-            status: 'сдан',
-            manager: 'Казак Светлана',
-            contractor: 'Дмитриев Александр',
-            lat: 53.3481 + (Math.random() - 0.5) * 0.5,
-            lng: 83.7794 + (Math.random() - 0.5) * 1.0,
-            isMock: true,
-            coordinatesStatus: 'estimated',
-            coordinatesSource: 'estimation'
-        }
-    ];
-    
-    updateFilters();
-    updateStatistics();
-    updateLegend();
-    showPointsOnMap();
-    
-    // Запускаем фоновое геокодирование для демо-точки
-    startBackgroundGeocoding();
-    
-    updateStatus('Демо-данные загружены');
-    showNotification('Используются демо-данные. Проверьте доступ к таблице.', 'warning');
-}
-
+// Остальные функции остаются без изменений (showPointsOnMap, createMarker, фильтрация и т.д.)
 // ========== ОТОБРАЖЕНИЕ ТОЧЕК НА КАРТЕ ==========
 function showPointsOnMap() {
     // Очищаем старые маркеры
     markerCluster.clearLayers();
+    markersMap.clear();
     
     // Фильтруем точки
     const filteredPoints = filterPoints();
@@ -895,6 +800,7 @@ function showPointsOnMap() {
         if (point.lat && point.lng) {
             const marker = createMarker(point);
             markerCluster.addLayer(marker);
+            markersMap.set(point.id, marker);
         }
     });
     
@@ -912,6 +818,7 @@ function showPointsOnMap() {
     }
     
     updateStatistics();
+    updateGeocodingStats();
 }
 
 function createMarker(point) {
@@ -929,44 +836,32 @@ function createMarker(point) {
         color = CONFIG.STATUS_COLORS['План'] || '#3498db';
     }
     
-    // Определяем иконку в зависимости от точности координат
-    let markerIcon = 'map-marker-alt';
-    let markerStyle = '';
-    
+    // Добавляем индикатор точности координат
+    let accuracyIcon = '';
     if (point.isMock) {
-        if (point.coordinatesStatus === 'estimated') {
-            markerIcon = 'location-arrow';
-            markerStyle = 'border: 2px dashed #f39c12;';
-            color = '#f39c12'; // Оранжевый для приблизительных
-        } else {
-            markerIcon = 'question-circle';
-            markerStyle = 'border: 2px dotted #95a5a6;';
-            color = '#95a5a6'; // Серый для случайных
-        }
+        accuracyIcon = '<div style="position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background: #f39c12; border-radius: 50%; border: 2px solid white;"></div>';
     }
     
     const icon = L.divIcon({
         html: `
-            <div style="
-                background: ${color};
-                width: 30px;
-                height: 30px;
-                border-radius: 50%;
-                border: 3px solid white;
-                ${markerStyle}
-                box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-weight: bold;
-                font-size: 12px;
-                position: relative;
-            " title="${point.coordinatesAccuracy === 'estimated' ? 'Приблизительные координаты' : 'Точные координаты'}">
-                <i class="fas fa-${markerIcon}" style="font-size: 14px;"></i>
-                ${point.coordinatesAccuracy === 'estimated' ? 
-                    '<div style="position: absolute; top: -5px; right: -5px; background: #f39c12; color: white; width: 12px; height: 12px; border-radius: 50%; font-size: 8px; display: flex; align-items: center; justify-content: center;">~</div>' : 
-                    ''}
+            <div style="position: relative;">
+                <div style="
+                    background: ${color};
+                    width: 30px;
+                    height: 30px;
+                    border-radius: 50%;
+                    border: 3px solid white;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: bold;
+                    font-size: 12px;
+                ">
+                    ${point.name ? point.name.charAt(0).toUpperCase() : 'Т'}
+                </div>
+                ${accuracyIcon}
             </div>
         `,
         className: 'custom-marker',
@@ -978,7 +873,8 @@ function createMarker(point) {
         icon: icon,
         title: point.name,
         status: point.status,
-        id: point.id
+        pointId: point.id,
+        isMock: point.isMock || false
     });
     
     // Всплывающее окно
@@ -996,16 +892,20 @@ function createPopupContent(point) {
     const color = CONFIG.STATUS_COLORS[point.status] || 
                   (point.status && point.status.toLowerCase().includes('сдан') ? CONFIG.STATUS_COLORS['сдан'] : CONFIG.STATUS_COLORS.default);
     
-    // Определяем источник координат
-    let coordinatesSource = 'Неизвестно';
-    if (point.coordinatesSource === 'osm') {
-        coordinatesSource = 'OpenStreetMap';
-    } else if (point.coordinatesSource === 'estimation') {
-        coordinatesSource = 'Приблизительные (по региону)';
-    } else if (point.coordinatesSource === 'random') {
-        coordinatesSource = 'Случайные';
-    } else if (point.coordinatesSource === 'demo') {
-        coordinatesSource = 'Демо-данные';
+    // Информация о точности координат
+    let accuracyInfo = '';
+    if (point.isMock) {
+        accuracyInfo = `
+            <div style="margin-top: 10px; padding: 5px; background: #f39c12; color: white; border-radius: 3px; font-size: 11px; display: flex; align-items: center; gap: 5px;">
+                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
+            </div>
+        `;
+    } else if (point.geocodingSource) {
+        accuracyInfo = `
+            <div style="margin-top: 10px; padding: 5px; background: #2ecc71; color: white; border-radius: 3px; font-size: 11px; display: flex; align-items: center; gap: 5px;">
+                <i class="fas fa-check-circle"></i> Точные координаты (${point.geocodingSource})
+            </div>
+        `;
     }
     
     return `
@@ -1049,394 +949,266 @@ function createPopupContent(point) {
                 ` : ''}
             </div>
             
-            <div style="margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 5px; font-size: 11px;">
-                <strong>Координаты:</strong> ${point.lat?.toFixed(6)}, ${point.lng?.toFixed(6)}<br>
-                <strong>Источник:</strong> ${coordinatesSource}<br>
-                <strong>Точность:</strong> ${point.coordinatesAccuracy === 'estimated' ? 'Приблизительные' : 'Точные'}
-                ${point.coordinatesUpdated ? `<br><strong>Обновлено:</strong> ${new Date(point.coordinatesUpdated).toLocaleString()}` : ''}
-            </div>
+            ${accuracyInfo}
             
-            ${point.isMock ? `
-                <div style="margin-top: 10px; padding: 5px; background: #f39c12; color: white; border-radius: 3px; font-size: 11px;">
-                    <i class="fas fa-exclamation-triangle"></i> Координаты будут уточнены в фоновом режиме
+            ${point.geocodedAt ? `
+                <div style="margin-top: 10px; font-size: 10px; color: #95a5a6; text-align: right;">
+                    Обновлено: ${new Date(point.geocodedAt).toLocaleString()}
                 </div>
             ` : ''}
         </div>
     `;
 }
 
-// ========== ФИЛЬТРАЦИЯ ==========
-function updateFilters() {
-    // Собираем уникальные значения
-    const filters = {
-        projects: new Set(),
-        regions: new Set(),
-        statuses: new Set(),
-        managers: new Set()
-    };
+// ========== ФУНКЦИИ УПРАВЛЕНИЯ ГЕОКОДИРОВАНИЕМ ==========
+
+// Ручной запуск геокодирования для выбранных точек
+function startManualGeocoding() {
+    if (!CONFIG.GEOCODING.enabled) {
+        showNotification('Геокодирование отключено в настройках', 'warning');
+        return;
+    }
     
-    allPoints.forEach(point => {
-        if (point.project) filters.projects.add(point.project);
-        if (point.region) filters.regions.add(point.region);
-        if (point.status) filters.statuses.add(point.status);
-        if (point.manager) filters.managers.add(point.manager);
+    const filteredPoints = filterPoints();
+    const pointsToGeocode = filteredPoints.filter(p => 
+        p.address && (p.isMock || !p.lat || !p.lng)
+    );
+    
+    if (pointsToGeocode.length === 0) {
+        showNotification('Нет точек для уточнения координат', 'info');
+        return;
+    }
+    
+    showNotification(`Начинаю уточнение координат для ${pointsToGeocode.length} точек...`, 'info');
+    
+    pointsToGeocode.forEach(point => {
+        addToGeocodingQueue(point);
     });
     
-    // Заполняем select'ы
-    fillFilter('filter-project', Array.from(filters.projects).sort());
-    fillFilter('filter-region', Array.from(filters.regions).sort());
-    fillFilter('filter-status', Array.from(filters.statuses).sort());
-    fillFilter('filter-manager', Array.from(filters.managers).sort());
+    if (!isGeocodingActive) {
+        processGeocodingQueue();
+    }
 }
 
-function fillFilter(selectId, options) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    
-    // Сохраняем выбранные значения
-    const selected = Array.from(select.selectedOptions).map(opt => opt.value);
-    
-    // Очищаем и добавляем "Все"
-    select.innerHTML = '<option value="">Все</option>';
-    
-    // Добавляем опции
-    options.forEach(option => {
-        if (option && option.trim() !== '') {
-            const opt = document.createElement('option');
-            opt.value = option;
-            opt.textContent = option;
-            
-            if (selected.includes(option)) {
-                opt.selected = true;
-            }
-            
-            select.appendChild(opt);
-        }
-    });
-}
-
-function applyFilters() {
-    // Получаем выбранные значения
-    activeFilters.projects = getSelectedValues('filter-project');
-    activeFilters.regions = getSelectedValues('filter-region');
-    activeFilters.statuses = getSelectedValues('filter-status');
-    activeFilters.managers = getSelectedValues('filter-manager');
-    
-    // Показываем отфильтрованные точки
-    showPointsOnMap();
-    
-    showNotification('Фильтры применены', 'success');
-}
-
-function clearFilters() {
-    // Сбрасываем select'ы
-    ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
-        const select = document.getElementById(id);
-        if (select) {
-            select.selectedIndex = 0;
-        }
-    });
-    
-    // Сбрасываем активные фильтры
-    activeFilters = {
-        projects: [],
-        regions: [],
-        statuses: [],
-        managers: []
-    };
-    
-    // Показываем все точки
-    showPointsOnMap();
-    
-    showNotification('Фильтры сброшены', 'success');
-}
-
-function getSelectedValues(selectId) {
-    const select = document.getElementById(selectId);
-    if (!select) return [];
-    
-    return Array.from(select.selectedOptions)
-        .map(opt => opt.value)
-        .filter(val => val !== '');
-}
-
-function filterPoints() {
-    return allPoints.filter(point => {
-        // Проверяем каждый фильтр
-        const filters = [
-            { key: 'project', value: point.project, active: activeFilters.projects },
-            { key: 'region', value: point.region, active: activeFilters.regions },
-            { key: 'status', value: point.status, active: activeFilters.statuses },
-            { key: 'manager', value: point.manager, active: activeFilters.managers }
-        ];
+// Очистка кэша геокодирования
+function clearGeocodingCache() {
+    if (confirm('Очистить кэш геокодирования? Все сохраненные координаты будут удалены.')) {
+        geocodingCache.clear();
+        localStorage.removeItem('geocoding_cache');
+        showNotification('Кэш геокодирования очищен', 'success');
         
-        for (const filter of filters) {
-            if (filter.active.length > 0) {
-                if (!filter.value || !filter.active.includes(filter.value)) {
-                    return false;
+        // Перезагружаем данные для применения изменений
+        setTimeout(() => {
+            loadData();
+        }, 1000);
+    }
+}
+
+// Показать статистику геокодирования
+function showGeocodingStats() {
+    const totalInCache = geocodingCache.size;
+    const exactInCache = Array.from(geocodingCache.values()).filter(c => c.isExact).length;
+    const approximateInCache = Array.from(geocodingCache.values()).filter(c => !c.isExact).length;
+    
+    const message = `
+        <div style="text-align: left;">
+            <h4>📊 Статистика геокодирования</h4>
+            <p><strong>Кэш координат:</strong> ${totalInCache} записей</p>
+            <p><strong>Точные координаты:</strong> ${exactInCache}</p>
+            <p><strong>Приблизительные:</strong> ${approximateInCache}</p>
+            <p><strong>В очереди:</strong> ${geocodingQueue.length} задач</p>
+            <hr>
+            <p><small>Кэш хранится ${CONFIG.GEOCODING.cacheDays} дней</small></p>
+        </div>
+    `;
+    
+    showModal('Статистика геокодирования', message);
+}
+
+// ========== АЛЬТЕРНАТИВНЫЙ СПОСОБ ЗАГРУЗКИ ==========
+async function tryAlternativeLoad() {
+    try {
+        updateStatus('Пробуем альтернативный способ...');
+        
+        // Используем Google Sheets CSV экспорт
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv`;
+        
+        const response = await fetch(csvUrl);
+        const csvText = await response.text();
+        
+        // Парсим CSV
+        const rows = csvText.split('\n').filter(row => row.trim() !== '');
+        
+        if (rows.length < 2) {
+            throw new Error('Мало данных в CSV');
+        }
+        
+        // Первая строка - заголовки
+        const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        
+        // Данные
+        const points = [];
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i].split(',').map(cell => cell.trim().replace(/"/g, ''));
+            const point = {};
+            
+            headers.forEach((header, index) => {
+                if (row[index]) {
+                    point[header] = row[index];
                 }
+            });
+            
+            if (point['Название ТТ']) {
+                points.push(point);
             }
         }
         
-        return true;
-    });
-}
-
-// ========== ПОИСК ==========
-function searchPoints() {
-    const searchInput = document.getElementById('search');
-    if (!searchInput) return;
-    
-    const query = searchInput.value.trim().toLowerCase();
-    
-    if (!query) {
-        showNotification('Введите текст для поиска', 'info');
-        return;
-    }
-    
-    // Ищем точки
-    const results = allPoints.filter(point => {
-        return (
-            (point.name && point.name.toLowerCase().includes(query)) ||
-            (point.address && point.address.toLowerCase().includes(query)) ||
-            (point.region && point.region.toLowerCase().includes(query)) ||
-            (point.manager && point.manager.toLowerCase().includes(query))
-        );
-    });
-    
-    if (results.length === 0) {
-        showNotification('Ничего не найдено', 'info');
-        return;
-    }
-    
-    // Показываем найденные точки
-    markerCluster.clearLayers();
-    
-    results.forEach(point => {
-        if (point.lat && point.lng) {
-            const marker = createMarker(point);
-            markerCluster.addLayer(marker);
+        allPoints = await processAndGeocode(points);
+        
+        updateFilters();
+        updateStatistics();
+        updateLegend();
+        showPointsOnMap();
+        
+        // Запускаем фоновое геокодирование
+        if (CONFIG.GEOCODING.enabled && CONFIG.GEOCODING.autoUpdate) {
+            startBackgroundGeocoding();
         }
-    });
-    
-    // Центрируем карту
-    if (results.length > 0 && results.some(p => p.lat && p.lng)) {
-        const bounds = L.latLngBounds(
-            results
-                .filter(p => p.lat && p.lng)
-                .map(p => [p.lat, p.lng])
-        );
         
-        if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [50, 50] });
+        updateStatus(`Загружено: ${allPoints.length} точек`);
+        showNotification('Данные загружены через CSV', 'success');
+        
+    } catch (error) {
+        console.error('Ошибка альтернативной загрузки:', error);
+        showNotification('Не удалось загрузить данные. Проверьте доступ к таблице.', 'error');
+        
+        // Показываем демо-данные для теста
+        showDemoData();
+    }
+}
+
+// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ processAndGeocode ==========
+async function processAndGeocode(points) {
+    const processedPoints = [];
+    
+    for (const point of points) {
+        // Стандартизируем поля
+        const processedPoint = {
+            id: `point_${Date.now()}_${Math.random()}`,
+            name: point['Название ТТ'] || point['Магазин'] || 'Без названия',
+            region: point['Регион'] || point['Область'] || '',
+            address: point['Адрес'] || point['Местоположение'] || '',
+            status: point['Статус ТТ'] || point['Статус'] || '',
+            manager: point['Менеджер ФИО'] || point['Менеджер'] || '',
+            contractor: point['Подрядчик ФИО'] || point['Подрядчик'] || ''
+        };
+        
+        // Проверяем кэш для быстрого получения координат
+        const cached = getCachedCoordinates(processedPoint.address, processedPoint.region);
+        
+        if (cached) {
+            // Используем координаты из кэша
+            processedPoint.lat = cached.lat;
+            processedPoint.lng = cached.lng;
+            processedPoint.coordinates = `${cached.lat},${cached.lng}`;
+            processedPoint.geocodingSource = cached.source;
+            processedPoint.isMock = !cached.isExact;
+        } else {
+            // Используем случайные координаты для быстрого отображения
+            const randomCoords = getRandomCoordinate(processedPoint.address, processedPoint.region);
+            processedPoint.lat = randomCoords.lat;
+            processedPoint.lng = randomCoords.lng;
+            processedPoint.coordinates = `${processedPoint.lat},${processedPoint.lng}`;
+            processedPoint.isMock = true;
+            processedPoint.geocodingSource = 'random_initial';
         }
+        
+        processedPoints.push(processedPoint);
     }
     
-    showNotification(`Найдено ${results.length} точек`, 'success');
+    return processedPoints;
 }
 
-// ========== ИНФОРМАЦИЯ О ТОЧКЕ ==========
-function showPointDetails(point) {
-    const container = document.getElementById('point-details');
-    const infoSection = document.getElementById('point-info');
+// ========== ДЕМО-ДАННЫЕ (обновленные с поддержкой геокодирования) ==========
+function showDemoData() {
+    console.log('Показываем демо-данные...');
     
-    // Определяем цвет статуса
-    let color = CONFIG.STATUS_COLORS.default;
-    const statusLower = (point.status || '').toLowerCase();
+    // Создаем демо-точки для теста
+    allPoints = [
+        {
+            id: 'demo_1',
+            name: 'Магнит №123',
+            region: 'Москва',
+            address: 'ул. Тверская, д. 1',
+            status: 'сдан',
+            manager: 'Иванов И.И.',
+            contractor: 'Иванов И.И.',
+            lat: 55.7570,
+            lng: 37.6145,
+            isMock: false,
+            geocodingSource: 'demo'
+        },
+        {
+            id: 'demo_2',
+            name: 'Магнит №124',
+            region: 'Московская обл.',
+            address: 'г. Химки, ул. Ленина, 25',
+            status: 'сдан',
+            manager: 'Иванов И.И.',
+            contractor: 'Иванов И.И.',
+            lat: 55.8890,
+            lng: 37.4450,
+            isMock: false,
+            geocodingSource: 'demo'
+        },
+        {
+            id: 'demo_3',
+            name: 'Басенджи',
+            region: 'Алтайский край',
+            address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
+            status: 'сдан',
+            manager: 'Казак Светлана',
+            contractor: 'Дмитриев Александр',
+            lat: 53.3481 + (Math.random() - 0.5) * 0.5,
+            lng: 83.7794 + (Math.random() - 0.5) * 1.0,
+            isMock: true,
+            geocodingSource: 'random'
+        }
+    ];
     
-    if (statusLower.includes('сдан') || statusLower.includes('актив')) {
-        color = CONFIG.STATUS_COLORS['сдан'] || '#2ecc71';
-    } else if (statusLower.includes('пауз') || statusLower.includes('отправлен')) {
-        color = CONFIG.STATUS_COLORS['Отправлен ФО, не принят'] || '#f39c12';
-    }
+    updateFilters();
+    updateStatistics();
+    updateLegend();
+    updateGeocodingStats();
+    showPointsOnMap();
     
-    // Определяем иконку точности координат
-    let accuracyIcon = '';
-    let accuracyText = '';
-    if (point.coordinatesAccuracy === 'estimated') {
-        accuracyIcon = '<i class="fas fa-location-arrow"></i>';
-        accuracyText = 'Приблизительные координаты (уточняются в фоне)';
-    } else if (point.isMock) {
-        accuracyIcon = '<i class="fas fa-question-circle"></i>';
-        accuracyText = 'Неточные координаты';
-    } else {
-        accuracyIcon = '<i class="fas fa-check-circle"></i>';
-        accuracyText = 'Точные координаты';
-    }
-    
-    container.innerHTML = `
-        <div style="margin-bottom: 15px;">
-            <h5 style="color: white; margin-bottom: 5px;">${point.name || 'Без названия'}</h5>
-            <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
-                ${point.status || 'Статус не указан'}
-            </span>
-        </div>
-        
-        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
-            ${point.address ? `
-                <p><strong>Адрес:</strong> ${point.address}</p>
-            ` : ''}
-            
-            ${point.lat && point.lng ? `
-                <p><strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}</p>
-                <p><strong>Точность:</strong> ${accuracyIcon} ${accuracyText}</p>
-            ` : ''}
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
-            ${point.region ? `
-                <div>
-                    <strong>Регион:</strong><br>
-                    ${point.region}
-                </div>
-            ` : ''}
-            
-            ${point.manager ? `
-                <div>
-                    <strong>Менеджер:</strong><br>
-                    ${point.manager}
-                </div>
-            ` : ''}
-            
-            ${point.contractor ? `
-                <div>
-                    <strong>Подрядчик:</strong><br>
-                    ${point.contractor}
-                </div>
-            ` : ''}
-        </div>
-        
-        ${point.coordinatesAccuracy === 'estimated' ? `
-            <div style="margin-top: 15px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px;">
-                <i class="fas fa-sync-alt fa-spin"></i> Координаты уточняются в фоновом режиме
-            </div>
-        ` : ''}
-    `;
-    
-    infoSection.style.display = 'block';
-    infoSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    updateStatus('Демо-данные загружены');
+    showNotification('Используются демо-данные. Проверьте доступ к таблице.', 'warning');
 }
 
-// ========== СТАТИСТИКА И ЛЕГЕНДА ==========
+// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ updateStatistics ==========
 function updateStatistics() {
     const filteredPoints = filterPoints();
     const shownPoints = filteredPoints.filter(p => p.lat && p.lng).length;
-    
-    const exactCoordinates = allPoints.filter(p => !p.isMock).length;
-    const estimatedCoordinates = allPoints.filter(p => p.isMock && p.coordinatesAccuracy === 'estimated').length;
-    const randomCoordinates = allPoints.filter(p => p.isMock && p.coordinatesAccuracy !== 'estimated').length;
+    const exactPoints = filteredPoints.filter(p => p.lat && p.lng && !p.isMock).length;
+    const approximatePoints = filteredPoints.filter(p => p.isMock).length;
     
     document.getElementById('total-points').textContent = allPoints.length;
     document.getElementById('shown-points').textContent = shownPoints;
     
-    // Обновляем статистику геокодирования если есть элемент
-    const geocodingStatsElement = document.getElementById('geocoding-stats');
-    if (geocodingStatsElement) {
-        geocodingStatsElement.innerHTML = `
+    // Обновляем статистику точности
+    const accuracyElement = document.getElementById('accuracy-stats');
+    if (accuracyElement) {
+        accuracyElement.innerHTML = `
             <div style="font-size: 12px; color: #95a5a6;">
-                📍 Точные: ${exactCoordinates} | ~ Приблизительные: ${estimatedCoordinates} | ? Случайные: ${randomCoordinates}
+                Точные: ${exactPoints} | Приблизительные: ${approximatePoints}
             </div>
         `;
     }
 }
 
-function updateLegend() {
-    const container = document.getElementById('legend');
-    
-    let legendHTML = '';
-    
-    // Собираем статусы из данных
-    const statuses = new Set();
-    allPoints.forEach(point => {
-        if (point.status) {
-            statuses.add(point.status);
-        }
-    });
-    
-    // Если мало статусов, добавляем стандартные
-    if (statuses.size < 3) {
-        statuses.add('сдан');
-        statuses.add('Отправлен ФО, не принят');
-        statuses.add('План');
-    }
-    
-    // Создаем элементы легенды для статусов
-    legendHTML += '<h6 style="margin-bottom: 10px;">Статусы:</h6>';
-    Array.from(statuses).sort().forEach(status => {
-        let color = CONFIG.STATUS_COLORS[status] || CONFIG.STATUS_COLORS.default;
-        const statusLower = status.toLowerCase();
-        
-        if (statusLower.includes('сдан') || statusLower.includes('актив')) {
-            color = '#2ecc71';
-        } else if (statusLower.includes('пауз') || statusLower.includes('отправлен')) {
-            color = '#f39c12';
-        } else if (statusLower.includes('закрыт')) {
-            color = '#e74c3c';
-        } else if (statusLower.includes('план')) {
-            color = '#3498db';
-        }
-        
-        legendHTML += `
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                <div style="width: 15px; height: 15px; border-radius: 50%; background: ${color}; border: 2px solid white;"></div>
-                <span style="font-size: 12px;">${status}</span>
-            </div>
-        `;
-    });
-    
-    // Легенда для точности координат
-    legendHTML += `
-        <hr style="margin: 15px 0; border-color: #4a6572;">
-        <h6 style="margin-bottom: 10px;">Точность координат:</h6>
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <div style="width: 15px; height: 15px; border-radius: 50%; background: #2ecc71; border: 2px solid white;"></div>
-            <span style="font-size: 12px;">Точные координаты</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <div style="width: 15px; height: 15px; border-radius: 50%; background: #f39c12; border: 2px dashed #f39c12;"></div>
-            <span style="font-size: 12px;">Приблизительные (уточняются)</span>
-        </div>
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-            <div style="width: 15px; height: 15px; border-radius: 50%; background: #95a5a6; border: 2px dotted #95a5a6;"></div>
-            <span style="font-size: 12px;">Случайные координаты</span>
-        </div>
-    `;
-    
-    container.innerHTML = legendHTML;
-}
-
-// ========== АВТООБНОВЛЕНИЕ ==========
-function setupAutoUpdate() {
-    if (CONFIG.UPDATE.auto) {
-        updateInterval = setInterval(loadData, CONFIG.UPDATE.interval);
-        console.log('Автообновление настроено: каждые', CONFIG.UPDATE.interval / 60000, 'минут');
-    }
-}
-
-// ========== УТИЛИТЫ И ИНТЕРФЕЙС ==========
-function updateStatus(message) {
-    const statusElement = document.getElementById('status');
-    if (statusElement) {
-        statusElement.innerHTML = `<i class="fas fa-circle" style="color: #2ecc71;"></i> ${message}`;
-    }
-}
-
-function showModal(title, message) {
-    document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-message').textContent = message;
-    document.getElementById('modal').style.display = 'flex';
-}
-
-function updateModal(title, message) {
-    document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-message').textContent = message;
-}
-
-function closeModal() {
-    document.getElementById('modal').style.display = 'none';
-}
-
-function showNotification(message, type = 'info') {
+// ========== ОБНОВЛЕННАЯ ФУНКЦИЯ showNotification ==========
+function showNotification(message, type = 'info', duration = 5000) {
     // Удаляем старые уведомления
     document.querySelectorAll('.notification').forEach(el => el.remove());
     
@@ -1467,6 +1239,8 @@ function showNotification(message, type = 'info') {
             align-items: center;
             gap: 10px;
             animation: slideIn 0.3s ease;
+            max-width: 400px;
+            word-wrap: break-word;
         ">
             <i class="fas fa-${icon}"></i>
             <span>${message}</span>
@@ -1475,7 +1249,7 @@ function showNotification(message, type = 'info') {
     
     document.body.appendChild(notification);
     
-    // Удаляем через 5 секунд
+    // Удаляем через указанное время
     setTimeout(() => {
         if (notification.parentElement) {
             notification.style.animation = 'slideOut 0.3s ease';
@@ -1485,17 +1259,15 @@ function showNotification(message, type = 'info') {
                 }
             }, 300);
         }
-    }, 5000);
+    }, duration);
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// ========== ЭКСПОРТ ФУНКЦИЙ ==========
+// ========== ЭКСПОРТ НОВЫХ ФУНКЦИЙ ==========
 window.loadData = loadData;
 window.clearFilters = clearFilters;
 window.applyFilters = applyFilters;
 window.searchPoints = searchPoints;
 window.closeModal = closeModal;
-[file content end]
+window.startManualGeocoding = startManualGeocoding;
+window.clearGeocodingCache = clearGeocodingCache;
+window.showGeocodingStats = showGeocodingStats;
