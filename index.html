@@ -1,635 +1,153 @@
+[file name]: index.html
+[file content begin]
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🗺️ Карта торговых точек | Геомониторинг</title>
-    
-    <!-- Meta теги для SEO -->
-    <meta name="description" content="Интерактивная карта торговых точек с умным геокодированием и статистикой">
-    <meta name="keywords" content="карта, торговые точки, геокодирование, мониторинг, аналитика">
-    <meta name="author" content="TT Map System">
+    <title>Карта торговых точек</title>
     
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" 
-          crossorigin="anonymous" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" 
-          integrity="sha256-mpPm7zLpZ4Rv0L+QcR6H1rJz7N4p6HpJjQyH4J9/2HY=" 
-          crossorigin="anonymous" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" 
-          integrity="sha256-x8W4DcqFKd5p3ltkULqMGNi8b1c6pL75f2p1b8Zz1kM=" 
-          crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     
     <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
-          integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" 
-          crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Стили -->
     <link rel="stylesheet" href="style.css">
-    
-    <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
-    
-    <!-- Кастомные стили для Leaflet -->
-    <style>
-        /* Переопределение стилей кластеров */
-        .marker-cluster-small {
-            background-color: rgba(46, 204, 113, 0.6);
-        }
-        .marker-cluster-small div {
-            background-color: rgba(46, 204, 113, 0.8);
-        }
-
-        .marker-cluster-medium {
-            background-color: rgba(52, 152, 219, 0.6);
-        }
-        .marker-cluster-medium div {
-            background-color: rgba(52, 152, 219, 0.8);
-        }
-
-        .marker-cluster-large {
-            background-color: rgba(231, 76, 60, 0.6);
-        }
-        .marker-cluster-large div {
-            background-color: rgba(231, 76, 60, 0.8);
-        }
-        
-        /* Стили для карты */
-        .leaflet-popup-content-wrapper {
-            border-radius: 12px;
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        
-        .leaflet-popup-content {
-            margin: 15px;
-            line-height: 1.4;
-        }
-        
-        .leaflet-popup-tip {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        /* Стили для контролов карты */
-        .leaflet-control-zoom a {
-            background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        }
-        
-        .leaflet-control-zoom a:hover {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-        }
-        
-        /* Прогресс бар для геокодирования */
-        #geocoding-progress {
-            display: none;
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-            z-index: 1000;
-            border-left: 4px solid #3498db;
-            min-width: 300px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-        
-        #geocoding-progress h5 {
-            margin-bottom: 10px;
-            color: #2c3e50;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .progress-container {
-            width: 100%;
-            height: 6px;
-            background: rgba(52, 152, 219, 0.1);
-            border-radius: 3px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #2ecc71, #3498db);
-            border-radius: 3px;
-            transition: width 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .progress-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            bottom: 0;
-            right: 0;
-            background-image: linear-gradient(
-                -45deg,
-                rgba(255, 255, 255, 0.2) 25%,
-                transparent 25%,
-                transparent 50%,
-                rgba(255, 255, 255, 0.2) 50%,
-                rgba(255, 255, 255, 0.2) 75%,
-                transparent 75%,
-                transparent
-            );
-            z-index: 1;
-            background-size: 50px 50px;
-            animation: move 2s linear infinite;
-        }
-        
-        @keyframes move {
-            0% {
-                background-position: 0 0;
-            }
-            100% {
-                background-position: 50px 50px;
-            }
-        }
-        
-        .progress-text {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            color: #7f8c8d;
-            margin-top: 5px;
-        }
-        
-        .progress-stats {
-            font-size: 11px;
-            color: #95a5a6;
-            margin-top: 5px;
-            display: flex;
-            justify-content: space-between;
-        }
-        
-        /* Стили для кнопки закрытия прогресса */
-        .progress-close {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: none;
-            border: none;
-            color: #95a5a6;
-            cursor: pointer;
-            font-size: 16px;
-            transition: color 0.3s;
-        }
-        
-        .progress-close:hover {
-            color: #e74c3c;
-        }
-        
-        /* Анимации */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
-        }
-    </style>
 </head>
 <body>
-    <!-- Главный контейнер -->
     <div class="container">
         <!-- Сайдбар -->
-        <aside class="sidebar">
-            <!-- Заголовок и статус -->
-            <header class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта торговых точек</h1>
+        <div class="sidebar">
+            <!-- Заголовок -->
+            <div class="header">
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ</h1>
                 <div class="status" id="status">
-                    <i class="fas fa-sync-alt fa-spin"></i> Инициализация системы...
+                    <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
                 </div>
-            </header>
+            </div>
             
             <!-- Статистика -->
-            <section class="stats">
-                <article class="stat-card">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #3498db;">
                         <i class="fas fa-store"></i>
                     </div>
                     <div class="stat-info">
                         <div class="stat-value" id="total-points">0</div>
                         <div class="stat-label">Всего точек</div>
                     </div>
-                </article>
+                </div>
                 
-                <article class="stat-card">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #2ecc71;">
                         <i class="fas fa-eye"></i>
                     </div>
                     <div class="stat-info">
                         <div class="stat-value" id="shown-points">0</div>
-                        <div class="stat-label">Показано на карте</div>
+                        <div class="stat-label">Показано</div>
                     </div>
-                </article>
-            </section>
+                </div>
+            </div>
             
-            <!-- Основные управляющие кнопки -->
-            <section class="controls">
-                <button class="btn btn-primary" onclick="loadData()" id="refresh-btn">
+            <!-- Статистика геокодирования -->
+            <div id="geocoding-stats" style="padding: 10px 20px; background: rgba(52, 152, 219, 0.1); border-radius: 8px; margin: 0 20px 15px;">
+                <!-- Динамически заполняется JavaScript -->
+            </div>
+            
+            <!-- Управление -->
+            <div class="controls">
+                <button class="btn btn-primary" onclick="loadData()">
                     <i class="fas fa-sync-alt"></i> Обновить данные
                 </button>
                 <button class="btn btn-secondary" onclick="clearFilters()">
                     <i class="fas fa-filter"></i> Сбросить фильтры
                 </button>
-            </section>
-            
-            <!-- Управление геокодированием -->
-            <section class="geocoding-controls">
-                <h4><i class="fas fa-map-marker-alt"></i> Геокодирование</h4>
-                <div class="geocoding-buttons">
-                    <button class="btn btn-success" onclick="startManualGeocoding()" id="geocode-btn">
-                        <i class="fas fa-search-location"></i> Найти координаты
-                    </button>
-                    <button class="btn btn-warning" onclick="stopGeocoding()" id="stop-geocode-btn" disabled>
-                        <i class="fas fa-stop-circle"></i> Остановить
-                    </button>
-                    <button class="btn btn-info" onclick="showGeocodingStats()">
-                        <i class="fas fa-chart-bar"></i> Статистика
-                    </button>
-                </div>
-            </section>
+            </div>
             
             <!-- Фильтры -->
-            <section class="filters">
-                <h3><i class="fas fa-filter"></i> Фильтрация точек</h3>
+            <div class="filters">
+                <h3><i class="fas fa-filter"></i> Фильтры</h3>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-project-diagram"></i> Проект:</label>
+                    <label>Проект:</label>
                     <select id="filter-project" multiple class="filter-select">
                         <option value="">Все проекты</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-globe-europe"></i> Регион:</label>
+                    <label>Регион:</label>
                     <select id="filter-region" multiple class="filter-select">
                         <option value="">Все регионы</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-info-circle"></i> Статус:</label>
+                    <label>Статус:</label>
                     <select id="filter-status" multiple class="filter-select">
                         <option value="">Все статусы</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-user-tie"></i> Менеджер:</label>
+                    <label>Менеджер:</label>
                     <select id="filter-manager" multiple class="filter-select">
                         <option value="">Все менеджеры</option>
                     </select>
                 </div>
                 
-                <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 20px;">
+                <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
                     <i class="fas fa-check"></i> Применить фильтры
                 </button>
-            </section>
+            </div>
             
-            <!-- Информация о выбранной точке -->
-            <section class="point-info" id="point-info">
-                <h4><i class="fas fa-info-circle"></i> Детали точки</h4>
-                <div id="point-details">
-                    <div style="text-align: center; padding: 20px; color: rgba(255, 255, 255, 0.7);">
-                        <i class="fas fa-mouse-pointer fa-2x" style="margin-bottom: 15px; opacity: 0.5;"></i>
-                        <p>Нажмите на точку на карте<br>для просмотра детальной информации</p>
-                    </div>
-                </div>
-            </section>
-            
-            <!-- Информация о системе -->
-            <footer style="padding: 20px; text-align: center; color: rgba(255, 255, 255, 0.5); font-size: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: auto;">
-                <p>
-                    <i class="fas fa-cogs"></i> Система геомониторинга v2.0<br>
-                    <small>Умное геокодирование • Яндекс → OSM • Автообновление</small>
-                </p>
-            </footer>
-        </aside>
+            <!-- Информация о точке -->
+            <div class="point-info" id="point-info" style="display: none;">
+                <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
+                <div id="point-details"></div>
+            </div>
+        </div>
         
-        <!-- Основная область с картой -->
-        <main class="map-container">
-            <!-- Контейнер для карты -->
+        <!-- Карта -->
+        <div class="map-container">
             <div id="map"></div>
             
-            <!-- Панель поиска -->
+            <!-- Поиск -->
             <div class="search-box">
-                <input type="text" 
-                       id="search" 
-                       placeholder="Поиск по названию, адресу или менеджеру..." 
-                       onkeypress="if(event.key === 'Enter') searchPoints()">
-                <button onclick="searchPoints()" title="Найти на карте">
-                    <i class="fas fa-search"></i>
-                </button>
+                <input type="text" id="search" placeholder="Поиск по названию или адресу...">
+                <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
             </div>
             
-            <!-- Легенда карты -->
+            <!-- Легенда -->
             <div class="legend">
-                <h5><i class="fas fa-key"></i> Легенда карты</h5>
-                <div id="legend">
-                    <div style="text-align: center; color: #7f8c8d; font-size: 13px; margin: 10px 0;">
-                        <i class="fas fa-spinner fa-spin"></i> Загрузка легенды...
-                    </div>
-                </div>
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee; font-size: 11px; color: #95a5a6;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
-                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #ffcc00; border: 2px solid white;"></div>
-                        <span>Яндекс.Карты</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; border-radius: 50%; background: #7bc96f; border: 2px solid white;"></div>
-                        <span>OpenStreetMap</span>
-                    </div>
-                </div>
+                <h5><i class="fas fa-key"></i> Легенда</h5>
+                <div id="legend"></div>
             </div>
-            
-            <!-- Кнопка быстрого возврата к обзору -->
-            <button id="reset-view-btn" 
-                    style="display: none; position: absolute; bottom: 25px; right: 25px; z-index: 1000; 
-                           background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; 
-                           border: none; padding: 12px 15px; border-radius: 10px; cursor: pointer; 
-                           box-shadow: 0 4px 15px rgba(52, 152, 219, 0.4); transition: all 0.3s;"
-                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(52, 152, 219, 0.6)'"
-                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(52, 152, 219, 0.4)'"
-                    onclick="resetMapView()">
-                <i class="fas fa-globe-europe"></i> Весь регион
-            </button>
-        </main>
+        </div>
     </div>
 
     <!-- Модальное окно -->
-    <div id="modal" class="modal">
+    <div id="modal" class="modal" style="display: none;">
         <div class="modal-content">
-            <h3 id="modal-title">Загрузка</h3>
-            <p id="modal-message">Пожалуйста, подождите...</p>
-            <div class="progress-container" style="margin: 20px 0;">
-                <div class="progress-bar-fill" id="modal-progress" style="width: 0%;"></div>
-            </div>
-            <button class="btn btn-primary" onclick="closeModal()" id="modal-ok-btn" style="display: none;">
-                <i class="fas fa-check"></i> OK
-            </button>
-        </div>
-    </div>
-    
-    <!-- Панель прогресса геокодирования -->
-    <div id="geocoding-progress" class="fade-in">
-        <button class="progress-close" onclick="hideGeocodingProgress()">
-            <i class="fas fa-times"></i>
-        </button>
-        <h5>
-            <i class="fas fa-search-location fa-spin"></i>
-            Фоновое геокодирование
-        </h5>
-        <div class="progress-container">
-            <div class="progress-fill" id="geocoding-progress-fill" style="width: 0%;"></div>
-        </div>
-        <div class="progress-text">
-            <span id="geocoding-processed">0</span>
-            <span id="geocoding-total">0</span>
-        </div>
-        <div class="progress-stats">
-            <span id="geocoding-yandex">Яндекс: 0</span>
-            <span id="geocoding-osm">OSM: 0</span>
-            <span id="geocoding-cache">Кэш: 0</span>
+            <h3 id="modal-title"></h3>
+            <p id="modal-message"></p>
+            <button class="btn btn-primary" onclick="closeModal()">OK</button>
         </div>
     </div>
 
-    <!-- Библиотеки JavaScript -->
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-            crossorigin="anonymous"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
-            integrity="sha256-mN1B0Z7qH6HkLVvZ6pLrH5Hv5OksX48QzKQr3aB1pkc="
-            crossorigin="anonymous"></script>
+    <!-- Библиотеки -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     
     <!-- Конфигурация -->
     <script src="config.js"></script>
     
-    <!-- Основное приложение -->
+    <!-- Приложение -->
     <script src="app.js"></script>
-    
-    <!-- Дополнительный скрипт для улучшения UI -->
-    <script>
-        // Дополнительные функции для улучшения пользовательского опыта
-        document.addEventListener('DOMContentLoaded', function() {
-            // Инициализация тултипов для кнопок
-            initTooltips();
-            
-            // Настройка обработчиков событий
-            setupEventListeners();
-            
-            // Показ времени загрузки
-            showLoadTime();
-        });
-        
-        function initTooltips() {
-            // Добавляем тултипы для кнопок
-            const buttons = document.querySelectorAll('.btn');
-            buttons.forEach(btn => {
-                const title = btn.getAttribute('title') || btn.textContent.trim();
-                if (title) {
-                    btn.setAttribute('data-tooltip', title);
-                }
-            });
-            
-            // Создаем стили для тултипов
-            const style = document.createElement('style');
-            style.textContent = `
-                [data-tooltip] {
-                    position: relative;
-                }
-                [data-tooltip]:hover::after {
-                    content: attr(data-tooltip);
-                    position: absolute;
-                    bottom: 100%;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    background: rgba(0, 0, 0, 0.8);
-                    color: white;
-                    padding: 5px 10px;
-                    border-radius: 4px;
-                    font-size: 12px;
-                    white-space: nowrap;
-                    z-index: 10000;
-                    margin-bottom: 5px;
-                    pointer-events: none;
-                    animation: fadeIn 0.2s ease-out;
-                }
-                [data-tooltip]:hover::before {
-                    content: '';
-                    position: absolute;
-                    bottom: 100%;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    border: 5px solid transparent;
-                    border-top-color: rgba(0, 0, 0, 0.8);
-                    margin-bottom: -5px;
-                    z-index: 10001;
-                    pointer-events: none;
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
-        function setupEventListeners() {
-            // Обработка нажатия Escape для закрытия модальных окон
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    const modal = document.getElementById('modal');
-                    if (modal.style.display === 'flex') {
-                        closeModal();
-                    }
-                    const progress = document.getElementById('geocoding-progress');
-                    if (progress.style.display === 'block') {
-                        hideGeocodingProgress();
-                    }
-                }
-            });
-            
-            // Автоматический фокус на поле поиска
-            const searchInput = document.getElementById('search');
-            searchInput.addEventListener('focus', function() {
-                this.select();
-            });
-            
-            // Обработка двойного клика на карте
-            const mapContainer = document.getElementById('map');
-            mapContainer.addEventListener('dblclick', function(e) {
-                if (e.target === this) {
-                    resetMapView();
-                }
-            });
-            
-            // Обновление статуса при изменении размера окна
-            window.addEventListener('resize', function() {
-                updateStatus('Размер окна изменен');
-                setTimeout(() => {
-                    updateStatus('Готово');
-                }, 1000);
-            });
-        }
-        
-        function showLoadTime() {
-            const loadTime = performance.timing.domContentLoadedEventEnd - performance.timing.navigationStart;
-            console.log(`Время загрузки страницы: ${loadTime}ms`);
-            
-            if (loadTime > 1000) {
-                setTimeout(() => {
-                    showNotification(`Страница загружена за ${loadTime}мс`, 'info');
-                }, 500);
-            }
-        }
-        
-        function resetMapView() {
-            if (window.map) {
-                const allPoints = window.allPoints || [];
-                const pointsWithCoords = allPoints.filter(p => p.lat && p.lng);
-                
-                if (pointsWithCoords.length > 0) {
-                    const bounds = L.latLngBounds(
-                        pointsWithCoords.map(p => [p.lat, p.lng])
-                    );
-                    
-                    if (bounds.isValid()) {
-                        map.fitBounds(bounds, { 
-                            padding: [50, 50], 
-                            maxZoom: 10,
-                            animate: true,
-                            duration: 1
-                        });
-                        
-                        showNotification('Карта возвращена к общему виду', 'success');
-                    }
-                } else {
-                    map.setView(CONFIG.MAP.center, CONFIG.MAP.zoom, {
-                        animate: true,
-                        duration: 1
-                    });
-                }
-                
-                // Скрываем кнопку после использования
-                const resetBtn = document.getElementById('reset-view-btn');
-                resetBtn.style.display = 'none';
-            }
-        }
-        
-        function hideGeocodingProgress() {
-            const progress = document.getElementById('geocoding-progress');
-            progress.style.display = 'none';
-            showNotification('Панель прогресса скрыта', 'info');
-        }
-        
-        // Экспортируем функции в глобальную область видимости
-        window.resetMapView = resetMapView;
-        window.hideGeocodingProgress = hideGeocodingProgress;
-        
-        // Глобальная функция для обновления прогресса геокодирования
-        window.updateGeocodingProgress = function(processed, total, yandex, osm, cache) {
-            const progress = document.getElementById('geocoding-progress');
-            const fill = document.getElementById('geocoding-progress-fill');
-            const processedEl = document.getElementById('geocoding-processed');
-            const totalEl = document.getElementById('geocoding-total');
-            const yandexEl = document.getElementById('geocoding-yandex');
-            const osmEl = document.getElementById('geocoding-osm');
-            const cacheEl = document.getElementById('geocoding-cache');
-            
-            if (progress && fill && processedEl && totalEl) {
-                progress.style.display = 'block';
-                const percentage = total > 0 ? (processed / total) * 100 : 0;
-                fill.style.width = percentage + '%';
-                processedEl.textContent = `Обработано: ${processed}`;
-                totalEl.textContent = `Всего: ${total}`;
-                
-                if (yandexEl) yandexEl.textContent = `Яндекс: ${yandex || 0}`;
-                if (osmEl) osmEl.textContent = `OSM: ${osm || 0}`;
-                if (cacheEl) cacheEl.textContent = `Кэш: ${cache || 0}`;
-            }
-        };
-        
-        // Глобальная функция для обновления кнопок геокодирования
-        window.updateGeocodingButtons = function(isRunning) {
-            const geocodeBtn = document.getElementById('geocode-btn');
-            const stopBtn = document.getElementById('stop-geocode-btn');
-            
-            if (geocodeBtn && stopBtn) {
-                if (isRunning) {
-                    geocodeBtn.disabled = true;
-                    stopBtn.disabled = false;
-                    geocodeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> В процессе...';
-                } else {
-                    geocodeBtn.disabled = false;
-                    stopBtn.disabled = true;
-                    geocodeBtn.innerHTML = '<i class="fas fa-search-location"></i> Найти координаты';
-                }
-            }
-        };
-        
-        // Глобальная функция для показа/скрытия кнопки сброса вида
-        window.toggleResetViewButton = function(show) {
-            const resetBtn = document.getElementById('reset-view-btn');
-            if (resetBtn) {
-                resetBtn.style.display = show ? 'block' : 'none';
-            }
-        };
-    </script>
 </body>
 </html>
+[file content end]
