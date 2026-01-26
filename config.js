@@ -40,5 +40,14 @@ const CONFIG = {
     UPDATE: {
         auto: true,
         interval: 300000 // 5 минут
+    },
+    
+    // Настройки геокодирования
+    GEOCODING: {
+        enabled: true,
+        priority: ['yandex', 'osm'], // Порядок источников
+        cacheDays: 30, // Дней хранения кэша
+        delayBetweenRequests: 500, // Задержка между запросами (мс)
+        batchSize: 5 // Размер пакета для фонового геокодирования
     }
 };
