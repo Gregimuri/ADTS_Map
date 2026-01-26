@@ -1,5 +1,3 @@
-[file name]: style.css
-[file content begin]
 /* Сброс и базовые стили */
 * {
     margin: 0;
@@ -23,7 +21,7 @@ body {
 
 /* Сайдбар */
 .sidebar {
-    width: 350px;
+    width: 380px;
     background: #34495e;
     display: flex;
     flex-direction: column;
@@ -108,23 +106,6 @@ body {
     margin-top: 5px;
 }
 
-/* Статус геокодирования */
-.geocoding-status {
-    background: #f39c12;
-    color: white;
-    padding: 10px 15px;
-    border-radius: 6px;
-    margin: 10px 20px;
-    font-size: 13px;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 0.8; }
-    50% { opacity: 1; }
-    100% { opacity: 0.8; }
-}
-
 /* Управление */
 .controls {
     padding: 0 20px 20px;
@@ -166,11 +147,27 @@ body {
     background: #95a5a6;
 }
 
+.btn-warning {
+    background: #f39c12;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #e67e22;
+}
+
+/* Геокодирование */
+.geocoding-controls {
+    background: rgba(0,0,0,0.1);
+    border-radius: 8px;
+    margin: 0 20px 20px;
+}
+
 /* Фильтры */
 .filters {
     padding: 20px;
     background: #2c3e50;
-    margin: 20px;
+    margin: 0 20px 20px;
     border-radius: 10px;
     flex: 1;
 }
@@ -221,7 +218,7 @@ body {
 /* Информация о точке */
 .point-info {
     background: #2c3e50;
-    margin: 20px;
+    margin: 0 20px 20px;
     padding: 20px;
     border-radius: 10px;
     border-top: 3px solid #3498db;
@@ -298,7 +295,7 @@ body {
     color: #2c3e50;
     border-radius: 10px;
     padding: 15px;
-    width: 220px;
+    width: 200px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
@@ -342,37 +339,6 @@ body {
     color: #ecf0f1;
 }
 
-/* Маркеры на карте */
-.custom-marker {
-    transition: all 0.3s ease;
-}
-
-.custom-marker:hover {
-    transform: scale(1.1);
-    z-index: 1000 !important;
-}
-
-/* Стили для различных типов маркеров */
-.marker-exact {
-    border: 3px solid white !important;
-}
-
-.marker-estimated {
-    border: 2px dashed #f39c12 !important;
-    animation: pulse-marker 2s infinite;
-}
-
-.marker-random {
-    border: 2px dotted #95a5a6 !important;
-    opacity: 0.8;
-}
-
-@keyframes pulse-marker {
-    0% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0); }
-}
-
 /* Скроллбар */
 ::-webkit-scrollbar {
     width: 8px;
@@ -392,10 +358,41 @@ body {
     background: #2980b9;
 }
 
+/* Кастомные маркеры */
+.custom-marker {
+    transition: transform 0.3s;
+}
+
+.custom-marker:hover {
+    transform: scale(1.1);
+}
+
+/* Кластеры */
+.marker-cluster-small {
+    background-color: rgba(181, 226, 140, 0.6);
+}
+.marker-cluster-small div {
+    background-color: rgba(110, 204, 57, 0.6);
+}
+
+.marker-cluster-medium {
+    background-color: rgba(241, 211, 87, 0.6);
+}
+.marker-cluster-medium div {
+    background-color: rgba(240, 194, 12, 0.6);
+}
+
+.marker-cluster-large {
+    background-color: rgba(253, 156, 115, 0.6);
+}
+.marker-cluster-large div {
+    background-color: rgba(241, 128, 23, 0.6);
+}
+
 /* Адаптивность */
 @media (max-width: 1024px) {
     .sidebar {
-        width: 300px;
+        width: 350px;
     }
 }
 
@@ -414,44 +411,29 @@ body {
     }
     
     .stats {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .geocoding-controls {
+        margin: 0 10px 15px;
+    }
+    
+    .filters {
+        margin: 0 10px 15px;
+        padding: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .stats {
         grid-template-columns: 1fr;
     }
     
-    .legend {
-        width: 180px;
-        font-size: 12px;
+    .controls {
+        flex-direction: column;
+    }
+    
+    .geocoding-controls > div {
+        flex-direction: column;
     }
 }
-
-/* Анимации для уведомлений */
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-@keyframes slideOut {
-    from {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    to {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-}
-
-/* Стили для кластеров */
-.custom-cluster {
-    transition: transform 0.3s;
-}
-
-.custom-cluster:hover {
-    transform: scale(1.1);
-}
-[file content end]
