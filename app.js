@@ -286,42 +286,108 @@ function processData(rows) {
     
     const points = [];
     const headers = rows[0].map(h => h.toString().trim());
+    
+    console.log('Заголовки таблицы:', headers);
+    
+    // Находим индексы колонок
     const colIndices = findColumnIndices(headers);
+    console.log('Индексы колонок:', colIndices);
     
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         
+        // Пропускаем пустые строки
         if (!row || row.length === 0 || row.every(cell => !cell || cell.toString().trim() === '')) {
             continue;
         }
         
+        // Создаем точку
         const point = {
             id: `point_${i}_${Date.now()}`,
-            sheetRow: i + 1
+            sheetRow: i + 1,
+            // Инициализируем все поля пустыми строками
+            name: '',
+            region: '',
+            address: '',
+            status: '',
+            manager: '',
+            contractor: ''
         };
         
+        // Заполняем данные из соответствующих колонок
         Object.keys(colIndices).forEach(key => {
             const index = colIndices[key];
             if (index !== -1 && index < row.length && row[index]) {
-                point[key] = row[index].toString().trim();
+                const value = row[index].toString().trim();
+                if (value) {
+                    point[key] = value;
+                }
             }
         });
         
-        if (!point.name) {
-            for (const [key, value] of Object.entries(point)) {
-                if (value && key !== 'id' && key !== 'sheetRow') {
-                    point.name = value.substring(0, 30) + '...';
-                    break;
-                }
+        console.log(`Строка ${i}:`, {
+            name: point.name,
+            region: point.region,
+            address: point.address,
+            status: point.status
+        });
+        
+        // Если нет названия, но есть адрес - используем часть адреса как название
+        if (!point.name || point.name.trim() === '') {
+            if (point.address) {
+                // Берем первую часть адреса как название
+                const firstPart = point.address.split(',')[0];
+                point.name = firstPart.trim().substring(0, 30) + (firstPart.length > 30 ? '...' : '');
+                console.log(`  Создано название из адреса: "${point.name}"`);
+            } else if (point.region) {
+                point.name = point.region + ' - Точка ' + i;
+            } else {
+                point.name = 'Точка ' + i;
             }
         }
         
-        if (point.name || point.address) {
+        // Проверяем, не перепутаны ли статус и регион
+        // Если в статусе есть "обл", "край", "респ" - это скорее всего регион
+        if (point.status && (point.status.toLowerCase().includes('обл') || 
+                             point.status.toLowerCase().includes('край') || 
+                             point.status.toLowerCase().includes('респ'))) {
+            console.log(`  ⚠️  Возможно статус и регион перепутаны: статус="${point.status}", регион="${point.region}"`);
+            // Меняем местами если регион пустой
+            if (!point.region || point.region.trim() === '') {
+                const temp = point.status;
+                point.status = '';
+                point.region = temp;
+                console.log(`  ↻ Исправлено: регион="${point.region}", статус="${point.status}"`);
+            }
+        }
+        
+        // Если адрес пустой, но есть регион - создаем адрес
+        if (!point.address || point.address.trim() === '') {
+            if (point.region && point.name) {
+                point.address = `${point.region}, ${point.name}`;
+            } else if (point.region) {
+                point.address = point.region;
+            } else if (point.name) {
+                point.address = point.name;
+            }
+        }
+        
+        // Добавляем точку если есть хоть какие-то данные
+        if (point.name || point.address || point.region) {
             points.push(point);
         }
     }
     
     console.log(`Обработано точек: ${points.length}`);
+    
+    // Выведем примеры первых 3 точек для отладки
+    if (points.length > 0) {
+        console.log('Примеры обработанных точек:');
+        points.slice(0, 3).forEach((p, i) => {
+            console.log(`  ${i+1}. Название: "${p.name}", Регион: "${p.region}", Адрес: "${p.address?.substring(0, 50)}...", Статус: "${p.status}"`);
+        });
+    }
+    
     return points;
 }
 
@@ -335,16 +401,31 @@ function findColumnIndices(headers) {
         contractor: -1
     };
     
+    console.log('Определяю колонки для заголовков:', headers);
+    
+    // Сначала создадим массивы ключевых слов для каждого типа колонки
+    const patterns = {
+        name: ['название тт', 'название', 'магазин', 'точка', 'торговая точка', 'тт'],
+        region: ['регион', 'область', 'район', 'город'],
+        address: ['адрес', 'местоположение', 'адресс', 'локация', 'место'],
+        status: ['статус тт', 'статус', 'состояние', 'статус точки'],
+        manager: ['менеджер фио', 'менеджер', 'ответственный', 'фио менеджера'],
+        contractor: ['подрядчик фио', 'подрядчик', 'исполнитель', 'фио подрядчика']
+    };
+    
+    // Ищем каждую колонку
     headers.forEach((header, index) => {
         if (!header) return;
         
         const headerLower = header.toString().toLowerCase().trim();
+        console.log(`  Проверяю заголовок [${index}]: "${header}" -> "${headerLower}"`);
         
         // Название
         if (indices.name === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.name) {
-                if (headerLower.includes(name.toLowerCase())) {
+            for (const pattern of patterns.name) {
+                if (headerLower === pattern || headerLower.includes(pattern)) {
                     indices.name = index;
+                    console.log(`    ✓ Найдено название в колонке ${index}`);
                     break;
                 }
             }
@@ -352,9 +433,10 @@ function findColumnIndices(headers) {
         
         // Регион
         if (indices.region === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.region) {
-                if (headerLower.includes(name.toLowerCase())) {
+            for (const pattern of patterns.region) {
+                if (headerLower === pattern || headerLower.includes(pattern)) {
                     indices.region = index;
+                    console.log(`    ✓ Найдено регион в колонке ${index}`);
                     break;
                 }
             }
@@ -362,9 +444,10 @@ function findColumnIndices(headers) {
         
         // Адрес
         if (indices.address === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.address) {
-                if (headerLower.includes(name.toLowerCase())) {
+            for (const pattern of patterns.address) {
+                if (headerLower === pattern || headerLower.includes(pattern)) {
                     indices.address = index;
+                    console.log(`    ✓ Найдено адрес в колонке ${index}`);
                     break;
                 }
             }
@@ -372,9 +455,10 @@ function findColumnIndices(headers) {
         
         // Статус
         if (indices.status === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.status) {
-                if (headerLower.includes(name.toLowerCase())) {
+            for (const pattern of patterns.status) {
+                if (headerLower === pattern || headerLower.includes(pattern)) {
                     indices.status = index;
+                    console.log(`    ✓ Найдено статус в колонке ${index}`);
                     break;
                 }
             }
@@ -382,9 +466,10 @@ function findColumnIndices(headers) {
         
         // Менеджер
         if (indices.manager === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.manager) {
-                if (headerLower.includes(name.toLowerCase())) {
+            for (const pattern of patterns.manager) {
+                if (headerLower === pattern || headerLower.includes(pattern)) {
                     indices.manager = index;
+                    console.log(`    ✓ Найдено менеджер в колонке ${index}`);
                     break;
                 }
             }
@@ -392,26 +477,34 @@ function findColumnIndices(headers) {
         
         // Подрядчик
         if (indices.contractor === -1) {
-            for (const name of CONFIG.COLUMN_NAMES.contractor) {
-                if (headerLower.includes(name.toLowerCase())) {
+            for (const pattern of patterns.contractor) {
+                if (headerLower === pattern || headerLower.includes(pattern)) {
                     indices.contractor = index;
+                    console.log(`    ✓ Найдено подрядчик в колонке ${index}`);
                     break;
                 }
             }
         }
     });
     
-    // Если не нашли адрес, ищем альтернативные названия
+    // Если какие-то колонки не найдены, попробуем найти по другим признакам
     if (indices.address === -1) {
+        // Ищем колонку с длинным текстом (скорее всего адрес)
         for (let i = 0; i < headers.length; i++) {
-            const header = headers[i].toLowerCase();
-            if (header.includes('адрес') || header.includes('местополож') || header.includes('адресс')) {
+            if (headers[i] && headers[i].length > 20 && indices.address === -1) {
                 indices.address = i;
-                break;
+                console.log(`    ⚠️ Адрес предположительно в колонке ${i} (длинный текст)`);
             }
         }
     }
     
+    if (indices.name === -1 && indices.address !== -1) {
+        // Если не нашли название, но нашли адрес, предположим что название в первой колонке
+        indices.name = 0;
+        console.log(`    ⚠️ Название предположительно в колонке 0 (первая колонка)`);
+    }
+    
+    console.log('Найденные индексы колонок:', indices);
     return indices;
 }
 
@@ -1006,6 +1099,15 @@ function createPopupContent(point) {
     const color = CONFIG.STATUS_COLORS[point.status] || 
                   (point.status && point.status.toLowerCase().includes('сдан') ? CONFIG.STATUS_COLORS['сдан'] : CONFIG.STATUS_COLORS.default);
     
+    // Очищаем адрес для отображения
+    let displayAddress = point.address || '';
+    if (displayAddress) {
+        displayAddress = displayAddress.replace(/^\d{6},?\s*/, '');
+        displayAddress = displayAddress.replace(/"/g, '');
+        displayAddress = displayAddress.trim();
+    }
+    
+    // Информация о точности координат
     let accuracyInfo = '';
     if (point.isMock) {
         accuracyInfo = `
@@ -1032,10 +1134,10 @@ function createPopupContent(point) {
                 <span style="color: ${color}; font-weight: 500;">${point.status || 'Не указан'}</span>
             </div>
             
-            ${point.address ? `
+            ${displayAddress ? `
                 <div style="margin-bottom: 10px;">
                     <strong>📍 Адрес:</strong><br>
-                    <span style="font-size: 14px;">${point.address}</span>
+                    <span style="font-size: 14px; word-break: break-word;">${displayAddress}</span>
                 </div>
             ` : ''}
             
@@ -1252,6 +1354,7 @@ function showPointDetails(point) {
     
     if (!container || !infoSection) return;
     
+    // Определяем цвет статуса
     let color = CONFIG.STATUS_COLORS.default;
     const statusLower = (point.status || '').toLowerCase();
     
@@ -1259,23 +1362,45 @@ function showPointDetails(point) {
         color = CONFIG.STATUS_COLORS['сдан'] || '#2ecc71';
     } else if (statusLower.includes('пауз') || statusLower.includes('отправлен')) {
         color = CONFIG.STATUS_COLORS['Отправлен ФО, не принят'] || '#f39c12';
+    } else if (statusLower.includes('закрыт')) {
+        color = CONFIG.STATUS_COLORS['Закрыта'] || '#e74c3c';
+    } else if (statusLower.includes('план')) {
+        color = CONFIG.STATUS_COLORS['План'] || '#3498db';
+    }
+    
+    // Очищаем адрес от лишних символов для отображения
+    let displayAddress = point.address || '';
+    if (displayAddress) {
+        // Удаляем почтовый индекс в начале
+        displayAddress = displayAddress.replace(/^\d{6},?\s*/, '');
+        // Удаляем двойные кавычки
+        displayAddress = displayAddress.replace(/"/g, '');
+        // Удаляем лишние пробелы
+        displayAddress = displayAddress.trim();
     }
     
     container.innerHTML = `
         <div style="margin-bottom: 15px;">
             <h5 style="color: white; margin-bottom: 5px;">${point.name || 'Без названия'}</h5>
-            <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
-                ${point.status || 'Статус не указан'}
-            </span>
+            ${point.status ? `
+                <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                    ${point.status}
+                </span>
+            ` : ''}
         </div>
         
         <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
-            ${point.address ? `
-                <p><strong>Адрес:</strong> ${point.address}</p>
+            ${displayAddress ? `
+                <p style="margin-bottom: 8px;">
+                    <strong>📍 Адрес:</strong><br>
+                    <span style="font-size: 14px; word-break: break-word;">${displayAddress}</span>
+                </p>
             ` : ''}
             
             ${point.lat && point.lng ? `
-                <p><strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}</p>
+                <p style="margin: 0;">
+                    <strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
+                </p>
             ` : ''}
         </div>
         
@@ -1300,6 +1425,16 @@ function showPointDetails(point) {
                     ${point.contractor}
                 </div>
             ` : ''}
+            
+            ${point.geocodingSource ? `
+                <div>
+                    <strong>Источник координат:</strong><br>
+                    ${point.geocodingSource === 'yandex' ? 'Яндекс Карты' : 
+                      point.geocodingSource === 'nominatim' ? 'OpenStreetMap' : 
+                      point.geocodingSource === 'random' ? 'Приблизительные' : 
+                      point.geocodingSource}
+                </div>
+            ` : ''}
         </div>
         
         ${point.isMock ? `
@@ -1312,7 +1447,6 @@ function showPointDetails(point) {
     infoSection.style.display = 'block';
     infoSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-
 // ========== СТАТИСТИКА И ЛЕГЕНДА ==========
 function updateStatistics() {
     const filteredPoints = filterPoints();
@@ -1552,3 +1686,4 @@ window.closeModal = closeModal;
 window.startManualGeocoding = startManualGeocoding;
 window.clearGeocodingCache = clearGeocodingCache;
 window.showGeocodingStats = showGeocodingStats;
+
