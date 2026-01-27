@@ -28,6 +28,17 @@
             to { transform: translateX(100%); opacity: 0; }
         }
         
+        /* Анимация маркеров */
+        @keyframes markerPulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .animated-marker {
+            animation: markerPulse 2s infinite;
+        }
+        
         /* Индикатор геокодирования */
         .geocoding-indicator {
             position: fixed;
@@ -58,6 +69,17 @@
             0% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.5; transform: scale(1.2); }
             100% { opacity: 1; transform: scale(1); }
+        }
+        
+        /* Анимация для маркера при обновлении координат */
+        .marker-updating {
+            animation: markerUpdate 1s ease-in-out;
+        }
+        
+        @keyframes markerUpdate {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
         }
     </style>
 </head>
@@ -276,4 +298,3 @@
 </script>
 </body>
 </html>
-
