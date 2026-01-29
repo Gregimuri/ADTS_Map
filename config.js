@@ -50,17 +50,15 @@ const CONFIG = {
         interval: 300000 // 5 минут
     },
     
-    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Улучшенная версия)
+    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Оптимизировано для OSM)
     GEOCODING: {
         enabled: true,
         
-        // Измененный порядок сервисов: сначала OSM, потом Яндекс
-        serviceOrder: ['nominatim', 'yandex', 'overpass'],
-        
         // Задержки между запросами (мс)
         delays: {
-            nominatim: 1000,  // 1 секунда между запросами к OSM
-            yandex: 1500      // 1.5 секунды между запросами к Яндексу
+            yandex: 1500,     // 1.5 секунды между запросами к Яндексу
+            nominatim: 2000,  // 2 секунды между запросами к OSM
+            overpass: 3000    // 3 секунды для Overpass
         },
         
         // Максимальное количество одновременных запросов
@@ -70,7 +68,7 @@ const CONFIG = {
         autoGeocode: true,
         
         // Кэширование (дней)
-        cacheDays: 30,
+        cacheDays: 60,
         
         // Максимальное количество попыток
         maxRetries: 3,
@@ -78,28 +76,41 @@ const CONFIG = {
         // Показывать приблизительные координаты до уточнения
         showApproximate: true,
         
-        // Пользовательский агент для OSM (обязательно для соблюдения правил)
-        osmUserAgent: 'TTMapApp/1.0 (contact@example.com)',
+        // Пользовательский агент для OSM (важно указывать корректный)
+        osmUserAgent: 'TTMapApp/1.0 (https://your-domain.com; contact@email.com)',
         
         // Настройки прокси для Яндекса
         proxy: {
             urls: [
-                'https://corsproxy.io/?',
+                'https://thingproxy.freeboard.io/fetch/',
                 'https://api.corsproxy.io/?',
-                'https://thingproxy.freeboard.io/fetch/'
+                'https://cors-anywhere.herokuapp.com/'
             ],
-            timeout: 15000 // 15 секунд таймаут
+            currentIndex: 0,
+            timeout: 10000 // 10 секунд таймаут
         },
         
         // Альтернативные сервисы геокодирования
         alternativeServices: {
-            osmOverpass: true    // Overpass API для поиска населенных пунктов
+            osmOverpass: true,    // Overpass API для поиска населенных пунктов
+            osmNominatim: true,   // Основной OSM сервис
+            yandexBackup: true    // Яндекс как резервный вариант
+        },
+        
+        // Настройки оптимизации для OSM
+        osmOptimization: {
+            normalizeAddresses: true,
+            removeStopWords: true,
+            reorderParts: true,
+            addCountryIfMissing: true,
+            useMultipleQueries: true
         },
         
         // Логирование
         logging: {
-            verbose: true
+            verbose: true,
+            showQueries: true,
+            showResults: true
         }
     }
 };
-
