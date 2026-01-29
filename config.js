@@ -76,7 +76,7 @@ const CONFIG = {
         showApproximate: true,
         
         // Пользовательский агент для OSM
-        osmUserAgent: 'TTMapApp/1.0 (https://github.com/tt-map)',
+        osmUserAgent: 'TTMapApp/1.0',
         
         // Настройки прокси для Яндекса
         proxy: {
@@ -86,40 +86,17 @@ const CONFIG = {
                 'https://api.allorigins.win/get?url='
             ],
             currentIndex: 0,
-            maxRetries: 3,
             timeout: 10000 // 10 секунд таймаут
         },
         
         // Альтернативные сервисы геокодирования
         alternativeServices: {
-            osmOverpass: true,    // Overpass API для поиска населенных пунктов
-            // dadata: false,     // DaData (требует API ключ)
-            // google: false,     // Google Maps (требует API ключ)
-            // bing: false        // Bing Maps (требует API ключ)
-        },
-        
-        // Настройки точности
-        accuracy: {
-            minImportance: 0.3,   // Минимальная важность для OSM
-            requireExactHouse: false // Требовать точный номер дома
+            osmOverpass: true    // Overpass API для поиска населенных пунктов
         },
         
         // Логирование
         logging: {
-            verbose: true,
-            showCacheHits: true,
-            showProxySwitches: true
-        }
-    },
-    
-    // Настройки безопасности
-    SECURITY: {
-        validateInputs: true,
-        sanitizeHTML: true,
-        rateLimit: {
-            enabled: true,
-            maxRequests: 100,
-            windowMs: 900000 // 15 минут
+            verbose: true
         }
     }
 };
