@@ -524,9 +524,9 @@ class GeocodingSystem {
         const normalized = this.normalizeRussianAddress(address, region);
         
         const serviceOrder = [
+            { name: 'overpass', func: () => this.geocodeOverpassAPI(address, region) },
             { name: 'yandex', func: () => this.geocodeYandex(address, region) },
-            { name: 'nominatim', func: () => this.geocodeNominatim(address, region) },
-            { name: 'overpass', func: () => this.geocodeOverpassAPI(address, region) }
+            { name: 'nominatim', func: () => this.geocodeNominatim(address, region) }
         ];
         
         let result = null;
@@ -1924,3 +1924,4 @@ setInterval(() => {
         updateGeocodingIndicator(isActive, queueSize);
     }
 }, 1000);
+
