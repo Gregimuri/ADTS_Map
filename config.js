@@ -54,10 +54,13 @@ const CONFIG = {
     GEOCODING: {
         enabled: true,
         
+        // Измененный порядок сервисов: сначала OSM, потом Яндекс
+        serviceOrder: ['nominatim', 'yandex', 'overpass'],
+        
         // Задержки между запросами (мс)
         delays: {
-            yandex: 1000,     // 1 секунда между запросами к Яндексу
-            nominatim: 2000   // 2 секунды между запросами к OSM
+            nominatim: 1000,  // 1 секунда между запросами к OSM
+            yandex: 1500      // 1.5 секунды между запросами к Яндексу
         },
         
         // Максимальное количество одновременных запросов
@@ -75,18 +78,17 @@ const CONFIG = {
         // Показывать приблизительные координаты до уточнения
         showApproximate: true,
         
-        // Пользовательский агент для OSM
-        osmUserAgent: 'TTMapApp/1.0',
+        // Пользовательский агент для OSM (обязательно для соблюдения правил)
+        osmUserAgent: 'TTMapApp/1.0 (contact@example.com)',
         
         // Настройки прокси для Яндекса
         proxy: {
             urls: [
-                'https://thingproxy.freeboard.io/fetch/',
+                'https://corsproxy.io/?',
                 'https://api.corsproxy.io/?',
-                'https://cors-anywhere.herokuapp.com/'
+                'https://thingproxy.freeboard.io/fetch/'
             ],
-            currentIndex: 0,
-            timeout: 10000 // 10 секунд таймаут
+            timeout: 15000 // 15 секунд таймаут
         },
         
         // Альтернативные сервисы геокодирования
@@ -100,4 +102,3 @@ const CONFIG = {
         }
     }
 };
-
