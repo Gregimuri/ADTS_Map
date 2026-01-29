@@ -28,15 +28,15 @@
             to { transform: translateX(100%); opacity: 0; }
         }
         
-        /* Анимация маркеров */
-        @keyframes markerPulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.8; }
-            100% { transform: scale(1); opacity: 1; }
+        /* Анимация для маркера при обновлении */
+        .marker-updating {
+            animation: markerUpdate 1s ease-in-out;
         }
         
-        .animated-marker {
-            animation: markerPulse 2s infinite;
+        @keyframes markerUpdate {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
         }
         
         /* Индикатор геокодирования */
@@ -69,17 +69,6 @@
             0% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.5; transform: scale(1.2); }
             100% { opacity: 1; transform: scale(1); }
-        }
-        
-        /* Анимация для маркера при обновлении координат */
-        .marker-updating {
-            animation: markerUpdate 1s ease-in-out;
-        }
-        
-        @keyframes markerUpdate {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.3); }
-            100% { transform: scale(1); }
         }
     </style>
 </head>
@@ -117,7 +106,6 @@
                     </div>
                 </div>
                 
-                <!-- Статистика точности -->
                 <div class="stat-card">
                     <div class="stat-icon" style="background: #f39c12;">
                         <i class="fas fa-bullseye"></i>
@@ -156,6 +144,16 @@
                     </button>
                 </div>
                 <div id="geocoding-stats" style="margin-top: 10px;"></div>
+            </div>
+            
+            <!-- Статус геокодирования -->
+            <div class="geocoding-status" style="padding: 10px 20px; background: rgba(0,0,0,0.1); margin: 0 20px 20px; border-radius: 8px;">
+                <div id="geocoding-status">
+                    <i class="fas fa-map-marker-alt"></i> Геокодирование: <span>Инициализация...</span>
+                </div>
+                <div id="geocoding-details" style="font-size: 11px; color: #95a5a6; margin-top: 5px;">
+                    Кэш: 0 | Яндекс: 0 | OSM: 0
+                </div>
             </div>
             
             <!-- Фильтры -->
@@ -249,8 +247,8 @@
     <div id="modal" class="modal" style="display: none;">
         <div class="modal-content">
             <h3 id="modal-title"></h3>
-            <p id="modal-message"></p>
-            <button class="btn btn-primary" onclick="closeModal()">OK</button>
+            <div id="modal-message"></div>
+            <button class="btn btn-primary" onclick="closeModal()" style="margin-top: 20px;">OK</button>
         </div>
     </div>
 
@@ -263,38 +261,5 @@
     
     <!-- Приложение -->
     <script src="app.js"></script>
-    
-    <script>
-    // Управление индикатором геокодирования
-    function updateGeocodingIndicator(active, queueSize = 0) {
-        const indicator = document.getElementById('geocoding-indicator');
-        const textElement = document.getElementById('geocoding-indicator-text');
-        
-        if (!indicator || !textElement) return;
-        
-        if (active || queueSize > 0) {
-            indicator.style.display = 'flex';
-            if (active) {
-                textElement.textContent = `Геокодирование... (${queueSize} в очереди)`;
-            } else {
-                textElement.textContent = `В очереди: ${queueSize}`;
-            }
-        } else {
-            indicator.style.display = 'none';
-        }
-    }
-    
-    // Мониторим очередь геокодирования
-    setInterval(() => {
-        if (window.geocodingSystem) {
-            const queueSize = window.geocodingSystem.queue.length;
-            const isActive = window.geocodingSystem.processing;
-            updateGeocodingIndicator(isActive, queueSize);
-        }
-    }, 1000);
-    
-    // Экспортируем функцию для использования в app.js
-    window.updateGeocodingIndicator = updateGeocodingIndicator;
-</script>
 </body>
 </html>
