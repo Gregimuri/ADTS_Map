@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек | Геокодирование</title>
+    <title>Карта торговых точек</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -17,48 +17,152 @@
     <link rel="stylesheet" href="style.css">
     
     <style>
-        /* Дополнительные анимации */
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
+        /* Анимации для уведомлений */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
         
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
         }
         
-        .floating {
-            animation: float 3s ease-in-out infinite;
+        /* Анимация для маркера при обновлении */
+        .marker-updating {
+            animation: markerUpdate 1s ease-in-out;
         }
         
-        /* Индикатор загрузки */
-        .loader {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,0.3);
+        @keyframes markerUpdate {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        
+        /* Индикатор геокодирования */
+        .geocoding-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #3498db;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+        
+        .geocoding-indicator .pulse {
+            width: 10px;
+            height: 10px;
+            background: #2ecc71;
             border-radius: 50%;
-            border-top-color: #3498db;
-            animation: spin 1s ease-in-out infinite;
+            animation: pulse 1.5s infinite;
         }
         
-        /* Карточки с градиентом */
-        .gradient-card {
-            background: linear-gradient(135deg, rgba(44, 62, 80, 0.9), rgba(52, 73, 94, 0.9));
-            border-radius: 12px;
-            padding: 20px;
-            margin: 15px;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
-            transition: all 0.3s;
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+            100% { opacity: 1; transform: scale(1); }
         }
         
-        .gradient-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
-            border-color: rgba(52, 152, 219, 0.3);
+        /* Дополнительные стили для улучшенной визуализации */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 3000;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .notification.slide-out {
+            animation: slideOut 0.3s ease;
+        }
+        
+        /* Стили для статуса геокодирования в сайдбаре */
+        .geocoding-status {
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.1);
+            margin: 0 20px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        
+        .geocoding-status i {
+            color: #3498db;
+        }
+        
+        .geocoding-status span {
+            color: #ecf0f1;
+            font-weight: 500;
+        }
+        
+        /* Стили для легенды точности */
+        .accuracy-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        
+        .accuracy-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            position: relative;
+        }
+        
+        .accuracy-dot.exact {
+            background: #2ecc71;
+        }
+        
+        .accuracy-dot.approximate {
+            background: #f39c12;
+        }
+        
+        .accuracy-dot.approximate::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            right: -3px;
+            width: 6px;
+            height: 6px;
+            background: #f39c12;
+            border-radius: 50%;
+            border: 1px solid white;
+        }
+        
+        /* Стили для статистики геокодирования */
+        .geocoding-stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .geocoding-stat-item {
+            background: rgba(255,255,255,0.05);
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .geocoding-stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .geocoding-stat-label {
+            font-size: 11px;
+            color: #95a5a6;
+            margin-top: 3px;
         }
     </style>
 </head>
@@ -68,10 +172,9 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt floating"></i> Карта Торговых Точек</h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ</h1>
                 <div class="status" id="status">
-                    <div class="loader"></div>
-                    <span>Инициализация приложения...</span>
+                    <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
                 </div>
             </div>
             
@@ -106,16 +209,6 @@
                         <div class="stat-label">Точность</div>
                     </div>
                 </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: #9b59b6;">
-                        <i class="fas fa-sync-alt"></i>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value" id="queue-size">0</div>
-                        <div class="stat-label">В очереди</div>
-                    </div>
-                </div>
             </div>
             
             <!-- Управление -->
@@ -130,19 +223,61 @@
             
             <!-- Геокодирование -->
             <div class="geocoding-controls">
-                <h4><i class="fas fa-search-location"></i> Геокодирование</h4>
-                <div>
-                    <button class="btn btn-primary" onclick="startManualGeocoding()">
+                <h4 style="color: white; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-search-location"></i> Геокодирование (OSM)
+                </h4>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="startManualGeocoding()" 
+                            style="padding: 8px 12px; font-size: 13px; background: #3498db;">
                         <i class="fas fa-bolt"></i> Уточнить координаты
                     </button>
-                    <button class="btn btn-secondary" onclick="showGeocodingStats()">
+                    <button class="btn btn-secondary" onclick="showGeocodingStats()" 
+                            style="padding: 8px 12px; font-size: 13px; background: #2ecc71;">
                         <i class="fas fa-chart-bar"></i> Статистика
                     </button>
-                    <button class="btn btn-warning" onclick="clearGeocodingCache()">
+                    <button class="btn btn-warning" onclick="clearGeocodingCache()" 
+                            style="padding: 8px 12px; font-size: 13px; background: #f39c12;">
                         <i class="fas fa-trash-alt"></i> Очистить кэш
                     </button>
                 </div>
-                <div id="geocoding-stats" style="margin-top: 15px;"></div>
+                
+                <!-- Прогресс геокодирования -->
+                <div id="geocoding-progress" class="geocoding-progress" style="display: none; margin-top: 10px;">
+                    <div class="geocoding-progress-bar" id="geocoding-progress-bar"></div>
+                    <div class="geocoding-progress-text">
+                        <span id="geocoding-progress-text">Обработка...</span>
+                        <span id="geocoding-queue-size">0 в очереди</span>
+                    </div>
+                </div>
+                
+                <!-- Детали геокодирования -->
+                <div id="geocoding-details" class="geocoding-details" style="display: none;">
+                    <div class="geocoding-details-item">
+                        <span class="geocoding-details-label">Обработано:</span>
+                        <span class="geocoding-details-value" id="geocoding-processed">0</span>
+                    </div>
+                    <div class="geocoding-details-item">
+                        <span class="geocoding-details-label">Найдено точно:</span>
+                        <span class="geocoding-details-value" id="geocoding-exact">0</span>
+                    </div>
+                    <div class="geocoding-details-item">
+                        <span class="geocoding-details-label">Приблизительно:</span>
+                        <span class="geocoding-details-value" id="geocoding-approximate">0</span>
+                    </div>
+                </div>
+                
+                <!-- Основная статистика -->
+                <div id="geocoding-stats" style="margin-top: 10px;"></div>
+            </div>
+            
+            <!-- Статус геокодирования -->
+            <div class="geocoding-status">
+                <div id="geocoding-status">
+                    <i class="fas fa-map-marker-alt"></i> Геокодирование: <span>Инициализация...</span>
+                </div>
+                <div id="geocoding-details" style="font-size: 11px; color: #95a5a6; margin-top: 5px;">
+                    Кэш: 0 | Яндекс: 0 | OSM: 0
+                </div>
             </div>
             
             <!-- Фильтры -->
@@ -150,75 +285,77 @@
                 <h3><i class="fas fa-filter"></i> Фильтры</h3>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-project-diagram"></i> Проект:</label>
+                    <label>Проект:</label>
                     <select id="filter-project" multiple class="filter-select">
                         <option value="">Все проекты</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-map-marker-alt"></i> Регион:</label>
+                    <label>Регион:</label>
                     <select id="filter-region" multiple class="filter-select">
                         <option value="">Все регионы</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-flag"></i> Статус:</label>
+                    <label>Статус:</label>
                     <select id="filter-status" multiple class="filter-select">
                         <option value="">Все статусы</option>
                     </select>
                 </div>
                 
                 <div class="filter-group">
-                    <label><i class="fas fa-user-tie"></i> Менеджер:</label>
+                    <label>Менеджер:</label>
                     <select id="filter-manager" multiple class="filter-select">
                         <option value="">Все менеджеры</option>
                     </select>
                 </div>
                 
-                <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 20px; width: 100%;">
+                <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
                     <i class="fas fa-check"></i> Применить фильтры
                 </button>
             </div>
             
-            <!-- Легенда -->
-            <div class="gradient-card">
-                <h5 style="color: white; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
-                    <i class="fas fa-key"></i> Легенда
+            <!-- Информация о точке -->
+            <div class="point-info" id="point-info" style="display: none;">
+                <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
+                <div id="point-details"></div>
+            </div>
+            
+            <!-- Легенда точности -->
+            <div class="legend-mini">
+                <h5 style="color: white; margin-bottom: 10px; font-size: 14px;">
+                    <i class="fas fa-map-pin"></i> Легенда координат
                 </h5>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div style="width: 16px; height: 16px; background: #2ecc71; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
-                        <span style="font-size: 13px; color: #ecf0f1;">Точные координаты</span>
+                <div class="accuracy-legend">
+                    <div class="accuracy-legend-item">
+                        <div class="accuracy-dot exact"></div>
+                        <span style="font-size: 12px; color: #ecf0f1;">Точные координаты</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <div style="position: relative; width: 16px; height: 16px;">
-                            <div style="width: 16px; height: 16px; background: #f39c12; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></div>
-                            <div style="position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; background: #f39c12; border-radius: 50%; border: 1px solid white;"></div>
-                        </div>
-                        <span style="font-size: 13px; color: #ecf0f1;">Приблизительные</span>
+                    <div class="accuracy-legend-item">
+                        <div class="accuracy-dot approximate"></div>
+                        <span style="font-size: 12px; color: #ecf0f1;">Приблизительные</span>
                     </div>
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <div style="font-size: 12px; color: #95a5a6; margin-bottom: 8px;">Статусы точек:</div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 12px; height: 12px; background: #2ecc71; border-radius: 50%;"></div>
-                                <span style="font-size: 11px; color: #ecf0f1;">Активная</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 12px; height: 12px; background: #f39c12; border-radius: 50%;"></div>
-                                <span style="font-size: 11px; color: #ecf0f1;">На паузе</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 12px; height: 12px; background: #e74c3c; border-radius: 50%;"></div>
-                                <span style="font-size: 11px; color: #ecf0f1;">Закрыта</span>
-                            </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <div style="width: 12px; height: 12px; background: #3498db; border-radius: 50%;"></div>
-                                <span style="font-size: 11px; color: #ecf0f1;">План</span>
-                            </div>
-                        </div>
+                </div>
+                
+                <!-- Статистика геокодирования -->
+                <div class="geocoding-stats-grid" style="margin-top: 15px; display: none;" id="detailed-geocoding-stats">
+                    <div class="geocoding-stat-item">
+                        <div class="geocoding-stat-value" id="geocoding-total">0</div>
+                        <div class="geocoding-stat-label">Всего</div>
+                    </div>
+                    <div class="geocoding-stat-item">
+                        <div class="geocoding-stat-value" id="geocoding-cached">0</div>
+                        <div class="geocoding-stat-label">Из кэша</div>
+                    </div>
+                    <div class="geocoding-stat-item">
+                        <div class="geocoding-stat-value" id="geocoding-osm">0</div>
+                        <div class="geocoding-stat-label">OSM</div>
+                    </div>
+                    <div class="geocoding-stat-item">
+                        <div class="geocoding-stat-value" id="geocoding-yandex">0</div>
+                        <div class="geocoding-stat-label">Яндекс</div>
                     </div>
                 </div>
             </div>
@@ -230,8 +367,14 @@
             
             <!-- Поиск -->
             <div class="search-box">
-                <input type="text" id="search" placeholder="Поиск по названию, адресу или региону...">
+                <input type="text" id="search" placeholder="Поиск по названию или адресу..." onkeypress="if(event.keyCode==13) searchPoints()">
                 <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
+            </div>
+            
+            <!-- Легенда -->
+            <div class="legend">
+                <h5><i class="fas fa-key"></i> Легенда статусов</h5>
+                <div id="legend"></div>
             </div>
             
             <!-- Индикатор геокодирования -->
@@ -239,29 +382,6 @@
                 <div class="pulse"></div>
                 <span id="geocoding-indicator-text">Геокодирование...</span>
             </div>
-            
-            <!-- Кнопка быстрого действия -->
-            <button id="quick-action" onclick="startManualGeocoding()" style="
-                position: absolute;
-                bottom: 90px;
-                right: 25px;
-                width: 50px;
-                height: 50px;
-                border-radius: 50%;
-                background: linear-gradient(135deg, #2ecc71, #27ae60);
-                color: white;
-                border: none;
-                cursor: pointer;
-                z-index: 1000;
-                box-shadow: 0 6px 20px rgba(46, 204, 113, 0.4);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 18px;
-                transition: all 0.3s;
-            ">
-                <i class="fas fa-bolt"></i>
-            </button>
         </div>
     </div>
 
@@ -270,7 +390,7 @@
         <div class="modal-content">
             <h3 id="modal-title"></h3>
             <div id="modal-message"></div>
-            <button class="btn btn-primary" onclick="closeModal()" style="margin-top: 25px; min-width: 120px;">Понятно</button>
+            <button class="btn btn-primary" onclick="closeModal()" style="margin-top: 20px;">OK</button>
         </div>
     </div>
 
@@ -285,31 +405,112 @@
     <script src="app.js"></script>
     
     <script>
-        // Обновляем индикатор очереди
-        setInterval(() => {
-            if (geocodingSystem) {
-                document.getElementById('queue-size').textContent = geocodingSystem.queue.length;
-            }
-        }, 1000);
-        
-        // Анимация для кнопки быстрого действия
-        const quickActionBtn = document.getElementById('quick-action');
-        if (quickActionBtn) {
-            quickActionBtn.addEventListener('mouseenter', () => {
-                quickActionBtn.style.transform = 'scale(1.1) rotate(5deg)';
-                quickActionBtn.style.boxShadow = '0 10px 25px rgba(46, 204, 113, 0.6)';
-            });
+        // Дополнительные функции для улучшенного интерфейса
+        function updateGeocodingProgress(processed, total, exact, approximate) {
+            const progressBar = document.getElementById('geocoding-progress-bar');
+            const progressText = document.getElementById('geocoding-progress-text');
+            const processedEl = document.getElementById('geocoding-processed');
+            const exactEl = document.getElementById('geocoding-exact');
+            const approximateEl = document.getElementById('geocoding-approximate');
+            const queueSizeEl = document.getElementById('geocoding-queue-size');
             
-            quickActionBtn.addEventListener('mouseleave', () => {
-                quickActionBtn.style.transform = 'scale(1) rotate(0)';
-                quickActionBtn.style.boxShadow = '0 6px 20px rgba(46, 204, 113, 0.4)';
-            });
+            if (progressBar && progressText) {
+                if (total > 0) {
+                    const percentage = (processed / total) * 100;
+                    progressBar.style.width = percentage + '%';
+                    progressText.textContent = `Обработано: ${processed}/${total}`;
+                    
+                    if (processedEl) processedEl.textContent = processed;
+                    if (exactEl) exactEl.textContent = exact;
+                    if (approximateEl) approximateEl.textContent = approximate;
+                    
+                    // Показываем прогресс
+                    document.getElementById('geocoding-progress').style.display = 'block';
+                    document.getElementById('geocoding-details').style.display = 'block';
+                }
+            }
         }
         
-        // Добавляем подсказку для кнопки быстрого действия
-        if (quickActionBtn) {
-            quickActionBtn.title = "Уточнить координаты всех точек";
+        function updateQueueSize(size) {
+            const queueSizeEl = document.getElementById('geocoding-queue-size');
+            if (queueSizeEl) {
+                queueSizeEl.textContent = size > 0 ? `${size} в очереди` : 'Очередь пуста';
+            }
         }
+        
+        function updateDetailedGeocodingStats(stats) {
+            const totalEl = document.getElementById('geocoding-total');
+            const cachedEl = document.getElementById('geocoding-cached');
+            const osmEl = document.getElementById('geocoding-osm');
+            const yandexEl = document.getElementById('geocoding-yandex');
+            
+            if (totalEl && stats) {
+                totalEl.textContent = stats.total || 0;
+                cachedEl.textContent = stats.cached || 0;
+                osmEl.textContent = stats.nominatim || 0;
+                yandexEl.textContent = stats.yandex || 0;
+                
+                // Показываем детальную статистику
+                document.getElementById('detailed-geocoding-stats').style.display = 'grid';
+            }
+        }
+        
+        // Обновление статуса геокодирования в реальном времени
+        setInterval(() => {
+            if (window.geocodingSystem) {
+                const stats = geocodingSystem.stats;
+                const queueSize = geocodingSystem.queue.length;
+                
+                // Обновляем статус в сайдбаре
+                const statusEl = document.getElementById('geocoding-status');
+                if (statusEl) {
+                    const span = statusEl.querySelector('span');
+                    if (span) {
+                        if (geocodingSystem.processing) {
+                            span.textContent = 'В процессе...';
+                            span.style.color = '#f39c12';
+                        } else if (queueSize > 0) {
+                            span.textContent = `${queueSize} в очереди`;
+                            span.style.color = '#3498db';
+                        } else {
+                            span.textContent = 'Готов';
+                            span.style.color = '#2ecc71';
+                        }
+                    }
+                }
+                
+                // Обновляем детали
+                const detailsEl = document.getElementById('geocoding-details');
+                if (detailsEl) {
+                    detailsEl.innerHTML = `
+                        Кэш: ${stats.cached || 0} | 
+                        Яндекс: ${stats.yandex || 0} | 
+                        OSM: ${stats.nominatim || 0} | 
+                        Очередь: ${queueSize}
+                    `;
+                }
+                
+                // Обновляем детальную статистику
+                updateDetailedGeocodingStats(stats);
+                updateQueueSize(queueSize);
+            }
+        }, 2000);
+        
+        // Инициализация при загрузке
+        document.addEventListener('DOMContentLoaded', function() {
+            // Добавляем обработчик Enter в поле поиска
+            const searchInput = document.getElementById('search');
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        searchPoints();
+                    }
+                });
+            }
+            
+            // Инициализируем прогресс геокодирования
+            updateGeocodingProgress(0, 0, 0, 0);
+        });
     </script>
 </body>
 </html>
