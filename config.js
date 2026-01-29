@@ -50,20 +50,18 @@ const CONFIG = {
         interval: 300000 // 5 минут
     },
     
-    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Решение 1: CORS прокси)
+    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Улучшенная версия)
     GEOCODING: {
         enabled: true,
-        // Алгоритм поиска: Нормализация → Яндекс (через прокси) → OpenStreetMap
-        // CORS прокси для Яндекса (allorigins.win)
         
         // Задержки между запросами (мс)
         delays: {
-            yandex: 800,     // 800ms между запросами к Яндексу (через прокси)
-            nominatim: 1500  // 1.5 секунды между запросами к OSM
+            yandex: 1000,     // 1 секунда между запросами к Яндексу
+            nominatim: 2000   // 2 секунды между запросами к OSM
         },
         
         // Максимальное количество одновременных запросов
-        maxConcurrent: 1,    // Для GitHub Pages лучше 1
+        maxConcurrent: 1,
         
         // Автоматическое геокодирование при загрузке
         autoGeocode: true,
@@ -72,23 +70,56 @@ const CONFIG = {
         cacheDays: 30,
         
         // Максимальное количество попыток
-        maxRetries: 2,
+        maxRetries: 3,
         
         // Показывать приблизительные координаты до уточнения
         showApproximate: true,
         
         // Пользовательский агент для OSM
-        osmUserAgent: 'TTMapApp/1.0',
+        osmUserAgent: 'TTMapApp/1.0 (https://github.com/tt-map)',
         
-        // Настройки прокси
+        // Настройки прокси для Яндекса
         proxy: {
-            // Используем allorigins.win как CORS прокси
-            url: 'https://api.allorigins.win/get?url=',
-            // Альтернативные прокси (если allorigins не работает):
-            alternatives: [
+            urls: [
                 'https://corsproxy.io/?',
-                'https://api.codetabs.com/v1/proxy?quest='
-            ]
+                'https://api.codetabs.com/v1/proxy?quest=',
+                'https://api.allorigins.win/get?url='
+            ],
+            currentIndex: 0,
+            maxRetries: 3,
+            timeout: 10000 // 10 секунд таймаут
+        },
+        
+        // Альтернативные сервисы геокодирования
+        alternativeServices: {
+            osmOverpass: true,    // Overpass API для поиска населенных пунктов
+            // dadata: false,     // DaData (требует API ключ)
+            // google: false,     // Google Maps (требует API ключ)
+            // bing: false        // Bing Maps (требует API ключ)
+        },
+        
+        // Настройки точности
+        accuracy: {
+            minImportance: 0.3,   // Минимальная важность для OSM
+            requireExactHouse: false // Требовать точный номер дома
+        },
+        
+        // Логирование
+        logging: {
+            verbose: true,
+            showCacheHits: true,
+            showProxySwitches: true
+        }
+    },
+    
+    // Настройки безопасности
+    SECURITY: {
+        validateInputs: true,
+        sanitizeHTML: true,
+        rateLimit: {
+            enabled: true,
+            maxRequests: 100,
+            windowMs: 900000 // 15 минут
         }
     }
 };
