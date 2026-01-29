@@ -81,9 +81,9 @@ const CONFIG = {
         // Настройки прокси для Яндекса
         proxy: {
             urls: [
-                'https://corsproxy.io/?',
-                'https://api.codetabs.com/v1/proxy?quest=',
-                'https://api.allorigins.win/get?url='
+                'https://thingproxy.freeboard.io/fetch/',
+                'https://api.corsproxy.io/?',
+                'https://cors-anywhere.herokuapp.com/'
             ],
             currentIndex: 0,
             timeout: 10000 // 10 секунд таймаут
@@ -100,3 +100,4 @@ const CONFIG = {
         }
     }
 };
+
