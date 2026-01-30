@@ -33,6 +33,7 @@ class GeocodingSystem {
         };
         this.loadCache();
         this.currentProxyIndex = 0;
+        this.regionCache = new Map(); // Кэш для границ регионов
     }
     
     loadCache() {
@@ -69,155 +70,249 @@ class GeocodingSystem {
     }
     
     normalizeRussianAddress(address, region = '') {
-    if (!address) return '';
-    
-    let normalized = address.toString().trim();
-    console.log(`📝 Исходный адрес: ${normalized}`);
-    
-    // Удаляем почтовые индексы
-    normalized = normalized.replace(/^\d{6},?\s*/, '');
-    normalized = normalized.replace(/,\s*\d{6}$/, '');
-    
-    // Обрабатываем скобки с населенными пунктами
-    normalized = normalized.replace(/\(([^)]+)\)/g, (match, p1) => {
-        // Если в скобках есть сокращения для населенных пунктов
-        if (p1.includes('с)') || p1.includes('пгт)') || p1.includes('рп)') || p1.includes('д)')) {
-            // Преобразуем "(с)" в "с."
-            return p1.replace(/\s*\)$/, '').replace('(', '');
+        if (!address) return '';
+        
+        let normalized = address.toString().trim();
+        console.log(`📝 Исходный адрес: ${normalized}`);
+        
+        // Удаляем почтовые индексы
+        normalized = normalized.replace(/^\d{6},?\s*/, '');
+        normalized = normalized.replace(/,\s*\d{6}$/, '');
+        
+        // Обрабатываем скобки с населенными пунктами - СОХРАНЯЕМ ИНФОРМАЦИЮ
+        normalized = normalized.replace(/\(([^)]+)\)/g, (match, p1) => {
+            const content = p1.trim();
+            // Если в скобках только тип населенного пункта - сохраняем как часть адреса
+            if (content === 'с' || content === 'пгт' || content === 'рп' || content === 'д') {
+                return content; // Возвращаем без скобок
+            }
+            // Если в скобках "Нас.пункт" - удаляем
+            if (content.toLowerCase().includes('нас.пункт') || content.toLowerCase().includes('населенный пункт')) {
+                return '';
+            }
+            return content; // Сохраняем другие данные
+        });
+        
+        // Заменяем "(с)" на "с." и т.д.
+        normalized = normalized.replace(/\s*\(\s*с\s*\)/gi, ' с.');
+        normalized = normalized.replace(/\s*\(\s*пгт\s*\)/gi, ' пгт.');
+        normalized = normalized.replace(/\s*\(\s*рп\s*\)/gi, ' рп.');
+        normalized = normalized.replace(/\s*\(\s*д\s*\)/gi, ' д.');
+        normalized = normalized.replace(/\s*\(\s*г\s*\)/gi, ' г.');
+        
+        // Убираем лишние слова, но сохраняем структуру
+        const stopWords = [
+            'торговая точка', 'торг\\s*точка', 'тт', 'магазин',
+            'здание', 'помещ[ение]*', 'пом\\.?', 'влд\\.?\\s*\\d+',
+            'владение\\s*\\d+', 'влад\\.?\\s*\\d+', 'корп\\.?\\s*\\d+',
+            'строение\\s*\\d+', 'жилой комплекс', 'жк', 'микрорайон', 'мкр\\.?',
+            'населенный пункт', 'нас\\.?\\s*пункт', 'нас\\.пункт', 
+            'населенного пункта', 'жилой дом', 'т\\.д\\.', 'т\\.п\\.'
+        ];
+        
+        stopWords.forEach(pattern => {
+            const regex = new RegExp(pattern, 'gi');
+            normalized = normalized.replace(regex, '');
+        });
+        
+        // Нормализуем сокращения (добавляем точки)
+        const replacements = {
+            'республика': 'Респ.', 'область': 'обл.', 'край': 'край',
+            'город': 'г.', 'поселок': 'п.', 'село': 'с.', 'деревня': 'д.',
+            'улица': 'ул.', 'проспект': 'пр-кт.', 'переулок': 'пер.',
+            'шоссе': 'ш.', 'проезд': 'пр-д.', 'площадь': 'пл.',
+            'поселок городского типа': 'пгт.', 'рабочий поселок': 'рп.',
+            'район': 'р-н', 'микрорайон': 'мкр.', 'бульвар': 'б-р.',
+            'проезд': 'пр-д.', 'аллея': 'ал.', 'набережная': 'наб.',
+            'тупик': 'туп.', 'линия': 'лин.', 'шоссе': 'шоссе.'
+        };
+        
+        Object.entries(replacements).forEach(([full, short]) => {
+            const regex = new RegExp(`\\b${full}\\b`, 'gi');
+            normalized = normalized.replace(regex, short);
+        });
+        
+        // Стандартизируем формат номеров домов
+        normalized = normalized.replace(/дом\s*№?\s*/gi, 'д.');
+        normalized = normalized.replace(/дом\s*/gi, 'д.');
+        normalized = normalized.replace(/зд\.?\s*/gi, 'д.');
+        normalized = normalized.replace(/пом\.?\s*/gi, 'пом.');
+        normalized = normalized.replace(/помещ\.?\s*/gi, 'пом.');
+        normalized = normalized.replace(/помещение\s*/gi, 'пом.');
+        
+        // Обработка дробных домов и корпусов
+        normalized = normalized.replace(/(\d+)\s*[\/\\]\s*(\d+)/g, '$1/$2');
+        normalized = normalized.replace(/(\d+)\s+([а-яa-z])(?![а-яa-z])/gi, '$1$2');
+        normalized = normalized.replace(/([а-яa-z])\s*(\d+)/gi, '$1$2');
+        
+        // Очистка и нормализация
+        normalized = normalized.replace(/,\s*,/g, ',');
+        normalized = normalized.replace(/\s+,\s*/g, ', ');
+        normalized = normalized.replace(/\s+/g, ' ').trim();
+        normalized = normalized.replace(/\s*-\s*/g, '-');
+        
+        // Удаляем двойные сокращения
+        normalized = normalized.replace(/\bс\.\s*с\./gi, 'с.');
+        normalized = normalized.replace(/\bг\.\s*г\./gi, 'г.');
+        normalized = normalized.replace(/\bд\.\s*д\./gi, 'д.');
+        normalized = normalized.replace(/\bул\.\s*ул\./gi, 'ул.');
+        
+        // Разделяем на части и анализируем структуру
+        const parts = normalized.split(',').map(p => p.trim()).filter(p => p.length > 0);
+        const classifiedParts = this.classifyAddressParts(parts);
+        
+        // Собираем в правильном порядке
+        const orderedParts = [];
+        
+        // 1. Регион (если есть)
+        if (classifiedParts.region) {
+            orderedParts.push(classifiedParts.region);
         }
-        return p1.trim();
-    });
-    
-    // Заменяем " (с)" на " с."
-    normalized = normalized.replace(/\s*\(с\)/g, ' с.');
-    normalized = normalized.replace(/\s*\(пгт\)/g, ' пгт.');
-    normalized = normalized.replace(/\s*\(рп\)/g, ' рп.');
-    normalized = normalized.replace(/\s*\(д\)/g, ' д.');
-    
-    // Убираем лишние слова
-    const stopWords = [
-        'торговая точка', 'торг\\s*точка', 'тт', 'магазин',
-        'здание', 'помещ[ение]*', 'пом\\.?', 'влд\\.?\\s*\\d+',
-        'владение\\s*\\d+', 'влад\\.?\\s*\\d+', 'корп\\.?\\s*\\d+',
-        'строение\\s*\\d+', 'жилой комплекс', 'жк', 'микрорайон', 'мкр\\.?',
-        'населенный пункт', 'нас\\.?\\s*пункт', 'нас\\.пункт'
-    ];
-    
-    stopWords.forEach(pattern => {
-        const regex = new RegExp(pattern, 'gi');
-        normalized = normalized.replace(regex, '');
-    });
-    
-    // Нормализуем сокращения
-    const replacements = {
-        'республика': 'Респ', 'область': 'обл', 'край': 'край',
-        'город': 'г', 'поселок': 'п', 'село': 'с', 'деревня': 'д',
-        'улица': 'ул', 'проспект': 'пр-кт', 'переулок': 'пер',
-        'шоссе': 'ш', 'проезд': 'пр-д', 'площадь': 'пл',
-        'поселок городского типа': 'пгт', 'рабочий поселок': 'рп',
-        'район': 'р-н', 'микрорайон': 'мкр', 'бульвар': 'б-р'
-    };
-    
-    Object.entries(replacements).forEach(([full, short]) => {
-        const regex = new RegExp(`\\b${full}\\b`, 'gi');
-        normalized = normalized.replace(regex, short);
-    });
-    
-    // Очистка
-    normalized = normalized.replace(/,\s*,/g, ',');
-    normalized = normalized.replace(/\s+,\s*/g, ', ');
-    normalized = normalized.replace(/\s+/g, ' ').trim();
-    normalized = normalized.replace(/\s*\/\s*/g, '/');
-    
-    // Обработка номера дома
-    normalized = normalized.replace(/(\d+)\s*[\/\\]\s*(\d+)/g, '$1/$2');
-    normalized = normalized.replace(/(\d+)\s+([а-яa-z])(?![а-яa-z])/gi, '$1$2');
-    
-    // Разделяем на части
-    const parts = normalized.split(',').map(p => p.trim()).filter(p => p.length > 1);
-    
-    // Восстанавливаем правильный порядок
-    const orderedParts = [];
-    const regionKeywords = ['обл', 'край', 'респ', 'ао', 'область'];
-    const settlementKeywords = ['г\\.', 'пгт\\.', 'рп\\.', 'с\\.', 'д\\.', 'п\\.'];
-    const streetKeywords = ['ул\\.', 'пр-кт\\.', 'пер\\.', 'ш\\.', 'б-р\\.', 'пр-д\\.', 'пл\\.'];
-    
-    // Ищем регион
-    const regionPart = parts.find(p => 
-        regionKeywords.some(kw => p.toLowerCase().includes(kw.toLowerCase()))
-    );
-    if (regionPart) orderedParts.push(regionPart);
-    
-    // Ищем населенный пункт - улучшенная логика
-    let settlementPart = null;
-    for (const part of parts) {
-        // Проверяем по ключевым словам
-        if (settlementKeywords.some(kw => part.toLowerCase().startsWith(kw))) {
-            settlementPart = part;
-            break;
+        
+        // 2. Населенный пункт (город/село)
+        if (classifiedParts.settlement) {
+            orderedParts.push(classifiedParts.settlement);
         }
-        // Проверяем названия городов/сел без сокращений
-        if (!regionKeywords.some(kw => part.toLowerCase().includes(kw)) &&
-            !streetKeywords.some(kw => part.toLowerCase().includes(kw)) &&
-            !/\d/.test(part) && 
-            part.length > 2 && 
-            part !== regionPart) {
-            // Проверяем, не является ли это улицей
-            const isStreet = streetKeywords.some(kw => 
-                part.toLowerCase().includes(kw.replace('\\.', ''))
+        
+        // 3. Улица
+        if (classifiedParts.street) {
+            orderedParts.push(classifiedParts.street);
+        }
+        
+        // 4. Номер дома
+        if (classifiedParts.house) {
+            orderedParts.push(classifiedParts.house);
+        }
+        
+        // 5. Остальные части (район, микрорайон и т.д.)
+        if (classifiedParts.other.length > 0) {
+            // Район добавляем после региона
+            const district = classifiedParts.other.find(p => 
+                p.includes('р-н') || p.toLowerCase().includes('район')
             );
-            if (!isStreet) {
-                settlementPart = part;
-                // Добавляем сокращение если его нет
-                if (!settlementPart.match(/^(г\.|с\.|п\.|пгт\.|рп\.|д\.)/i)) {
-                    // Определяем тип по контексту
-                    if (part.toLowerCase().includes('мамонтово')) {
-                        settlementPart = 'с. ' + part.replace(' с.', '').replace('с.', '').trim();
+            if (district && !orderedParts.includes(district)) {
+                const regionIndex = orderedParts.findIndex(p => 
+                    p.includes('обл') || p.includes('край') || p.includes('Респ.')
+                );
+                if (regionIndex !== -1) {
+                    orderedParts.splice(regionIndex + 1, 0, district);
+                }
+            }
+            
+            // Остальное добавляем в конец
+            classifiedParts.other.forEach(part => {
+                if (!orderedParts.includes(part)) {
+                    orderedParts.push(part);
+                }
+            });
+        }
+        
+        // Убираем дубликаты
+        const uniqueParts = [];
+        const seen = new Set();
+        orderedParts.forEach(part => {
+            const key = part.toLowerCase()
+                .replace(/^[гсдрпгт]\.\s*/i, '')
+                .replace(/^ул\.\s*/i, '')
+                .replace(/^пр-кт\.\s*/i, '')
+                .replace(/\./g, '')
+                .trim();
+            if (!seen.has(key)) {
+                seen.add(key);
+                uniqueParts.push(part);
+            }
+        });
+        
+        normalized = uniqueParts.join(', ');
+        
+        // Добавляем "Россия" если нужно (но не для OSM запросов)
+        if (!normalized.toLowerCase().includes('россия') && 
+            (normalized.toLowerCase().includes('обл.') || 
+             normalized.toLowerCase().includes('край') ||
+             normalized.toLowerCase().includes('респ.'))) {
+            normalized = normalized + ', Россия';
+        }
+        
+        console.log(`📝 Нормализованный адрес: ${normalized}`);
+        return normalized.trim();
+    }
+    
+    classifyAddressParts(parts) {
+        const result = {
+            region: null,
+            settlement: null,
+            street: null,
+            house: null,
+            other: []
+        };
+        
+        const regionPatterns = [/обл\.?/i, /край/i, /респ\.?/i, /ао/i];
+        const settlementPatterns = [/^г\./i, /^с\./i, /^п\./i, /^пгт\./i, /^рп\./i, /^д\./i];
+        const streetPatterns = [/^ул\./i, /^пр-кт\./i, /^пер\./i, /^ш\./i, /^б-р\./i, /^пр-д\./i, /^пл\./i, /^наб\./i, /^ал\./i];
+        const housePatterns = [/^\d/, /^д\.?\s*\d/i, /корп\./i, /строен\./i, /литер\s*[а-я]/i];
+        const districtPatterns = [/р-н/i, /район/i];
+        
+        for (const part of parts) {
+            let classified = false;
+            
+            // Проверяем регион
+            if (!result.region && regionPatterns.some(pattern => pattern.test(part))) {
+                result.region = part;
+                classified = true;
+            }
+            
+            // Проверяем населенный пункт
+            if (!result.settlement && settlementPatterns.some(pattern => pattern.test(part))) {
+                result.settlement = part;
+                classified = true;
+            } else if (!result.settlement && part.length > 2 && !/\d/.test(part)) {
+                // Если нет явного указания, но есть название населенного пункта
+                // Проверяем, что это не улица и не район
+                const isStreet = streetPatterns.some(pattern => pattern.test(part));
+                const isDistrict = districtPatterns.some(pattern => pattern.test(part));
+                if (!isStreet && !isDistrict && !result.region) {
+                    // Проверяем известные названия населенных пунктов
+                    const knownSettlements = ['мамонтово', 'барнаул', 'новосибирск', 'москва', 'санкт-петербург'];
+                    if (knownSettlements.some(s => part.toLowerCase().includes(s))) {
+                        // Определяем тип по контексту
+                        let type = 'с.';
+                        if (part.toLowerCase().includes('барнаул') || 
+                            part.toLowerCase().includes('новосибирск') ||
+                            part.toLowerCase().includes('москва')) {
+                            type = 'г.';
+                        }
+                        result.settlement = type + ' ' + part;
+                        classified = true;
                     }
                 }
-                break;
+            }
+            
+            // Проверяем улицу
+            if (!result.street && streetPatterns.some(pattern => pattern.test(part))) {
+                result.street = part;
+                classified = true;
+            }
+            
+            // Проверяем номер дома
+            if (!result.house && housePatterns.some(pattern => pattern.test(part))) {
+                result.house = part;
+                classified = true;
+            }
+            
+            // Проверяем район
+            if (!classified && districtPatterns.some(pattern => pattern.test(part))) {
+                result.other.push(part);
+                classified = true;
+            }
+            
+            // Остальное
+            if (!classified && part.length > 0) {
+                result.other.push(part);
             }
         }
+        
+        return result;
     }
-    
-    if (settlementPart && !orderedParts.includes(settlementPart)) {
-        orderedParts.push(settlementPart);
-    }
-    
-    // Ищем улицу
-    const streetPart = parts.find(p => 
-        streetKeywords.some(kw => p.toLowerCase().includes(kw))
-    );
-    if (streetPart && !orderedParts.includes(streetPart)) orderedParts.push(streetPart);
-    
-    // Ищем номер дома
-    const housePart = parts.find(p => 
-        /\d+/.test(p) && !orderedParts.includes(p) && 
-        !settlementKeywords.some(kw => p.toLowerCase().includes(kw.replace('\\.', '')))
-    );
-    if (housePart) orderedParts.push(housePart);
-    
-    // Добавляем остальные части
-    parts.forEach(part => {
-        if (!orderedParts.includes(part) && part) {
-            orderedParts.push(part);
-        }
-    });
-    
-    // Собираем обратно
-    normalized = orderedParts.join(', ');
-    
-    // Добавляем Россию если нужно
-    if (!normalized.toLowerCase().includes('россия') && 
-        (normalized.toLowerCase().includes('обл') || 
-         normalized.toLowerCase().includes('край') ||
-         normalized.toLowerCase().includes('респ'))) {
-        normalized = normalized + ', Россия';
-    }
-    
-    console.log(`📝 Нормализованный адрес: ${normalized}`);
-    return normalized.trim();
-}
     
     getCacheKey(address, region = '') {
         const normalized = this.normalizeRussianAddress(address, region).toLowerCase();
@@ -342,7 +437,6 @@ class GeocodingSystem {
                         const lon = parseFloat(pos[0]);
                         const lat = parseFloat(pos[1]);
                         
-                        // Проверяем, что координаты в пределах России
                         if (this.isValidCoordinateForRegion(lat, lon, region || address)) {
                             console.log(`✅ Яндекс нашел: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
                             
@@ -358,7 +452,7 @@ class GeocodingSystem {
                             this.saveToCache(address, region, lat, lon, 'yandex', true);
                             return result;
                         } else {
-                            console.warn(`❌ Координаты вне региона: ${lat}, ${lon}`);
+                            console.warn(`❌ Яндекс: координаты вне региона`);
                         }
                     }
                     
@@ -378,77 +472,22 @@ class GeocodingSystem {
     }
     
     isValidCoordinateForRegion(lat, lng, region) {
-        const regionBounds = {
-            'Алтайский': { minLat: 49, maxLat: 54, minLng: 78, maxLng: 88 },
-            'Архангельская': { minLat: 61, maxLat: 66, minLng: 37, maxLng: 48 },
-            'Астраханская': { minLat: 45, maxLat: 48, minLng: 45, maxLng: 50 },
-            'Белгородская': { minLat: 50, maxLat: 51, minLng: 35, maxLng: 39 },
-            'Брянская': { minLat: 52, maxLat: 54, minLng: 31, maxLng: 35 },
-            'Владимирская': { minLat: 55, maxLat: 57, minLng: 38, maxLng: 42 },
-            'Волгоградская': { minLat: 48, maxLat: 51, minLng: 41, maxLng: 47 },
-            'Вологодская': { minLat: 58, maxLat: 62, minLng: 35, maxLng: 46 },
-            'Воронежская': { minLat: 49, maxLat: 52, minLng: 38, maxLng: 43 },
-            'Еврейская': { minLat: 48, maxLat: 49, minLng: 130, maxLng: 135 },
-            'Забайкальский': { minLat: 49, maxLat: 58, minLng: 108, maxLng: 122 },
-            'Ивановская': { minLat: 56, maxLat: 58, minLng: 39, maxLng: 43 },
-            'Иркутская': { minLat: 52, maxLat: 62, minLng: 96, maxLng: 119 },
-            'Калининградская': { minLat: 54, maxLat: 55, minLng: 19, maxLng: 23 },
-            'Калужская': { minLat: 53, maxLat: 55, minLng: 33, maxLng: 37 },
-            'Камчатский': { minLat: 51, maxLat: 62, minLng: 155, maxLng: 174 },
-            'Кемеровская': { minLat: 53, maxLat: 56, minLng: 84, maxLng: 89 },
-            'Кировская': { minLat: 57, maxLat: 61, minLng: 46, maxLng: 54 },
-            'Костромская': { minLat: 58, maxLat: 59, minLng: 40, maxLng: 47 },
-            'Краснодарский': { minLat: 44, maxLat: 46, minLng: 37, maxLng: 41 },
-            'Красноярский': { minLat: 53, maxLat: 70, minLng: 78, maxLng: 113 },
-            'Курганская': { minLat: 54, maxLat: 56, minLng: 62, maxLng: 68 },
-            'Курская': { minLat: 51, maxLat: 52, minLng: 34, maxLng: 38 },
-            'Ленинградская': { minLat: 58, maxLat: 61, minLng: 28, maxLng: 35 },
-            'Липецкая': { minLat: 52, maxLat: 53, minLng: 37, maxLng: 40 },
-            'Магаданская': { minLat: 59, maxLat: 66, minLng: 146, maxLng: 162 },
-            'Московская': { minLat: 54, maxLat: 57, minLng: 35, maxLng: 40 },
-            'Мурманская': { minLat: 66, maxLat: 69, minLng: 28, maxLng: 41 },
-            'Нижегородская': { minLat: 55, maxLat: 58, minLng: 42, maxLng: 48 },
-            'Новгородская': { minLat: 57, maxLat: 59, minLng: 30, maxLng: 35 },
-            'Новосибирская': { minLat: 53, maxLat: 57, minLng: 75, maxLng: 84 },
-            'Омская': { minLat: 53, maxLat: 58, minLng: 70, maxLng: 76 },
-            'Оренбургская': { minLat: 50, maxLat: 54, minLng: 50, maxLng: 62 },
-            'Орловская': { minLat: 52, maxLat: 53, minLng: 35, maxLng: 38 },
-            'Пензенская': { minLat: 52, maxLat: 54, minLng: 42, maxLng: 47 },
-            'Пермский': { minLat: 56, maxLat: 61, minLng: 52, maxLng: 59 },
-            'Приморский': { minLat: 42, maxLat: 48, minLng: 130, maxLng: 139 },
-            'Псковская': { minLat: 56, maxLat: 58, minLng: 27, maxLng: 31 },
-            'Ростовская': { minLat: 46, maxLat: 50, minLng: 38, maxLng: 44 },
-            'Рязанская': { minLat: 53, maxLat: 55, minLng: 38, maxLng: 42 },
-            'Самарская': { minLat: 52, maxLat: 54, minLng: 48, maxLng: 52 },
-            'Саратовская': { minLat: 50, maxLat: 53, minLng: 42, maxLng: 50 },
-            'Сахалинская': { minLat: 46, maxLat: 54, minLng: 142, maxLng: 145 },
-            'Свердловская': { minLat: 56, maxLat: 60, minLng: 57, maxLng: 66 },
-            'Смоленская': { minLat: 54, maxLat: 56, minLng: 31, maxLng: 35 },
-            'Тамбовская': { minLat: 52, maxLat: 53, minLng: 40, maxLng: 43 },
-            'Тверская': { minLat: 55, maxLat: 58, minLng: 31, maxLng: 38 },
-            'Томская': { minLat: 56, maxLat: 59, minLng: 75, maxLng: 89 },
-            'Тульская': { minLat: 53, maxLat: 55, minLng: 35, maxLng: 39 },
-            'Тюменская': { minLat: 55, maxLat: 59, minLng: 65, maxLng: 75 },
-            'Удмуртская': { minLat: 56, maxLat: 58, minLng: 51, maxLng: 54 },
-            'Ульяновская': { minLat: 53, maxLat: 55, minLng: 46, maxLng: 49 },
-            'Хабаровский': { minLat: 47, maxLat: 54, minLng: 130, maxLng: 140 },
-            'Ханты-Мансийский': { minLat: 59, maxLat: 65, minLng: 61, maxLng: 85 },
-            'Челябинская': { minLat: 53, maxLat: 56, minLng: 57, maxLng: 62 },
-            'Чеченская': { minLat: 43, maxLat: 44, minLng: 45, maxLng: 46 },
-            'Чувашская': { minLat: 54, maxLat: 56, minLng: 45, maxLng: 48 },
-            'Ямало-Ненецкий': { minLat: 64, maxLat: 70, minLng: 64, maxLng: 84 },
-            'Ярославская': { minLat: 57, maxLat: 58, minLng: 38, maxLng: 43 },
-            'Москва': { minLat: 55, maxLat: 56, minLng: 37, maxLng: 38 },
-            'Санкт-Петербург': { minLat: 59, maxLat: 60, minLng: 30, maxLng: 31 },
-            'Севастополь': { minLat: 44, maxLat: 45, minLng: 33, maxLng: 34 },
-            'Байконур': { minLat: 45, maxLat: 46, minLng: 63, maxLng: 64 }
-        };
+        // Кэшируем границы регионов для быстрого доступа
+        if (!this.regionCache.has('bounds')) {
+            this.regionCache.set('bounds', this.getRegionBounds());
+        }
         
-        for (const [key, bounds] of Object.entries(regionBounds)) {
-            if (region && region.includes(key)) {
-                console.log(`🗺️  Проверка региона ${key}: ${lat}∈[${bounds.minLat},${bounds.maxLat}], ${lng}∈[${bounds.minLng},${bounds.maxLng}]`);
-                return lat >= bounds.minLat && lat <= bounds.maxLat && 
-                       lng >= bounds.minLng && lng <= bounds.maxLng;
+        const regionBounds = this.regionCache.get('bounds');
+        
+        // Если регион указан, проверяем по нему
+        if (region) {
+            for (const [key, bounds] of Object.entries(regionBounds)) {
+                if (region.toLowerCase().includes(key.toLowerCase())) {
+                    const inRegion = lat >= bounds.minLat && lat <= bounds.maxLat && 
+                                   lng >= bounds.minLng && lng <= bounds.maxLng;
+                    console.log(`🗺️  Проверка региона ${key}: ${lat}∈[${bounds.minLat},${bounds.maxLat}], ${lng}∈[${bounds.minLng},${bounds.maxLng}] = ${inRegion ? 'OK' : 'FAIL'}`);
+                    return inRegion;
+                }
             }
         }
         
@@ -458,23 +497,124 @@ class GeocodingSystem {
         return inRussia;
     }
     
+    getRegionBounds() {
+        return {
+            // Центральные регионы
+            'Москва': { minLat: 55.5, maxLat: 56.0, minLng: 37.3, maxLng: 37.9 },
+            'Московская': { minLat: 54.5, maxLat: 56.5, minLng: 35.0, maxLng: 40.5 },
+            'Санкт-Петербург': { minLat: 59.8, maxLat: 60.1, minLng: 29.5, maxLng: 30.9 },
+            'Ленинградская': { minLat: 58.5, maxLat: 61.5, minLng: 28.0, maxLng: 35.5 },
+            
+            // Сибирь и Дальний Восток
+            'Алтайский': { minLat: 49.0, maxLat: 54.0, minLng: 78.0, maxLng: 89.0 },
+            'Красноярский': { minLat: 51.0, maxLat: 70.0, minLng: 78.0, maxLng: 113.0 },
+            'Иркутская': { minLat: 52.0, maxLat: 62.0, minLng: 96.0, maxLng: 119.0 },
+            'Новосибирская': { minLat: 53.0, maxLat: 57.0, minLng: 75.0, maxLng: 84.0 },
+            'Омская': { minLat: 53.0, maxLat: 58.0, minLng: 70.0, maxLng: 76.0 },
+            'Томская': { minLat: 56.0, maxLat: 60.0, minLng: 75.0, maxLng: 89.0 },
+            'Кемеровская': { minLat: 53.0, maxLat: 56.0, minLng: 84.0, maxLng: 89.0 },
+            
+            // Урал
+            'Свердловская': { minLat: 56.0, maxLat: 61.0, minLng: 57.0, maxLng: 66.0 },
+            'Челябинская': { minLat: 53.0, maxLat: 56.0, minLng: 57.0, maxLng: 62.0 },
+            'Тюменская': { minLat: 55.0, maxLat: 59.0, minLng: 65.0, maxLng: 75.0 },
+            'Пермский': { minLat: 56.0, maxLat: 61.0, minLng: 52.0, maxLng: 59.0 },
+            
+            // Поволжье
+            'Татарстан': { minLat: 54.0, maxLat: 56.0, minLng: 47.0, maxLng: 54.0 },
+            'Самарская': { minLat: 52.0, maxLat: 54.0, minLng: 48.0, maxLng: 52.0 },
+            'Саратовская': { minLat: 50.0, maxLat: 53.0, minLng: 42.0, maxLng: 50.0 },
+            'Волгоградская': { minLat: 48.0, maxLat: 51.0, minLng: 41.0, maxLng: 47.0 },
+            'Нижегородская': { minLat: 55.0, maxLat: 58.0, minLng: 42.0, maxLng: 48.0 },
+            
+            // Юг России
+            'Краснодарский': { minLat: 44.0, maxLat: 46.5, minLng: 37.0, maxLng: 41.5 },
+            'Ростовская': { minLat: 46.0, maxLat: 50.0, minLng: 38.0, maxLng: 44.0 },
+            'Ставропольский': { minLat: 44.0, maxLat: 46.0, minLng: 40.0, maxLng: 46.0 },
+            'Крым': { minLat: 44.0, maxLat: 46.0, minLng: 32.0, maxLng: 36.0 },
+            
+            // Северо-Запад
+            'Архангельская': { minLat: 61.0, maxLat: 66.0, minLng: 37.0, maxLng: 48.0 },
+            'Вологодская': { minLat: 58.0, maxLat: 62.0, minLng: 35.0, maxLng: 46.0 },
+            'Мурманская': { minLat: 66.0, maxLat: 69.0, minLng: 28.0, maxLng: 41.0 },
+            'Карелия': { minLat: 60.0, maxLat: 66.0, minLng: 29.0, maxLng: 37.0 },
+            
+            // Центральная Россия
+            'Воронежская': { minLat: 49.0, maxLat: 52.0, minLng: 38.0, maxLng: 43.0 },
+            'Белгородская': { minLat: 50.0, maxLat: 51.0, minLng: 35.0, maxLng: 39.0 },
+            'Курская': { minLat: 51.0, maxLat: 52.0, minLng: 34.0, maxLng: 38.0 },
+            'Липецкая': { minLat: 52.0, maxLat: 53.0, minLng: 37.0, maxLng: 40.0 },
+            'Тамбовская': { minLat: 52.0, maxLat: 53.0, minLng: 40.0, maxLng: 43.0 },
+            'Тульская': { minLat: 53.0, maxLat: 55.0, minLng: 35.0, maxLng: 39.0 },
+            'Рязанская': { minLat: 53.0, maxLat: 55.0, minLng: 38.0, maxLng: 42.0 },
+            'Орловская': { minLat: 52.0, maxLat: 53.0, minLng: 35.0, maxLng: 38.0 },
+            'Брянская': { minLat: 52.0, maxLat: 54.0, minLng: 31.0, maxLng: 35.0 },
+            'Смоленская': { minLat: 54.0, maxLat: 56.0, minLng: 31.0, maxLng: 35.0 },
+            'Калужская': { minLat: 53.0, maxLat: 55.0, minLng: 33.0, maxLng: 37.0 },
+            'Владимирская': { minLat: 55.0, maxLat: 57.0, minLng: 38.0, maxLng: 42.0 },
+            'Ивановская': { minLat: 56.0, maxLat: 58.0, minLng: 39.0, maxLng: 43.0 },
+            'Костромская': { minLat: 58.0, maxLat: 59.0, minLng: 40.0, maxLng: 47.0 },
+            'Ярославская': { minLat: 57.0, maxLat: 58.0, minLng: 38.0, maxLng: 43.0 },
+            'Тверская': { minLat: 55.0, maxLat: 58.0, minLng: 31.0, maxLng: 38.0 },
+            'Псковская': { minLat: 56.0, maxLat: 58.0, minLng: 27.0, maxLng: 31.0 },
+            'Новгородская': { minLat: 57.0, maxLat: 59.0, minLng: 30.0, maxLng: 35.0 },
+            
+            // Приволжье
+            'Кировская': { minLat: 57.0, maxLat: 61.0, minLng: 46.0, maxLng: 54.0 },
+            'Удмуртская': { minLat: 56.0, maxLat: 58.0, minLng: 51.0, maxLng: 54.0 },
+            'Чувашская': { minLat: 54.0, maxLat: 56.0, minLng: 45.0, maxLng: 48.0 },
+            'Марий Эл': { minLat: 56.0, maxLat: 57.0, minLng: 46.0, maxLng: 50.0 },
+            'Мордовия': { minLat: 53.0, maxLat: 55.0, minLng: 42.0, maxLng: 46.0 },
+            'Пензенская': { minLat: 52.0, maxLat: 54.0, minLng: 42.0, maxLng: 47.0 },
+            'Ульяновская': { minLat: 53.0, maxLat: 55.0, minLng: 46.0, maxLng: 49.0 },
+            'Оренбургская': { minLat: 50.0, maxLat: 54.0, minLng: 50.0, maxLng: 62.0 },
+            'Башкортостан': { minLat: 52.0, maxLat: 56.0, minLng: 53.0, maxLng: 60.0 },
+            
+            // Северный Кавказ
+            'Дагестан': { minLat: 41.0, maxLat: 44.0, minLng: 45.0, maxLng: 48.0 },
+            'Чеченская': { minLat: 42.0, maxLat: 44.0, minLng: 45.0, maxLng: 47.0 },
+            'Ингушетия': { minLat: 42.0, maxLat: 43.0, minLng: 44.0, maxLng: 46.0 },
+            'Северная Осетия': { minLat: 42.0, maxLat: 43.0, minLng: 43.0, maxLng: 45.0 },
+            'Кабардино-Балкария': { minLat: 43.0, maxLat: 44.0, minLng: 42.0, maxLng: 44.0 },
+            'Карачаево-Черкесия': { minLat: 43.0, maxLat: 44.0, minLng: 40.0, maxLng: 42.0 },
+            'Адыгея': { minLat: 44.0, maxLat: 45.0, minLng: 39.0, maxLng: 40.0 },
+            'Калмыкия': { minLat: 45.0, maxLat: 47.0, minLng: 44.0, maxLng: 47.0 },
+            
+            // Дальний Восток
+            'Приморский': { minLat: 42.0, maxLat: 48.0, minLng: 130.0, maxLng: 139.0 },
+            'Хабаровский': { minLat: 47.0, maxLat: 54.0, minLng: 130.0, maxLng: 140.0 },
+            'Амурская': { minLat: 49.0, maxLat: 56.0, minLng: 119.0, maxLng: 134.0 },
+            'Сахалинская': { minLat: 46.0, maxLat: 54.0, minLng: 142.0, maxLng: 145.0 },
+            'Камчатский': { minLat: 51.0, maxLat: 62.0, minLng: 155.0, maxLng: 174.0 },
+            'Магаданская': { minLat: 59.0, maxLat: 66.0, minLng: 146.0, maxLng: 162.0 },
+            'Чукотский': { minLat: 62.0, maxLat: 71.0, minLng: 170.0, maxLng: 190.0 },
+            
+            // Другие
+            'Астраханская': { minLat: 45.0, maxLat: 48.0, minLng: 45.0, maxLng: 50.0 },
+            'Курганская': { minLat: 54.0, maxLat: 56.0, minLng: 62.0, maxLng: 68.0 },
+            'Ханты-Мансийский': { minLat: 59.0, maxLat: 65.0, minLng: 61.0, maxLng: 85.0 },
+            'Ямало-Ненецкий': { minLat: 64.0, maxLat: 70.0, minLng: 64.0, maxLng: 84.0 },
+            'Еврейская': { minLat: 47.0, maxLat: 49.0, minLng: 130.0, maxLng: 135.0 },
+            'Забайкальский': { minLat: 49.0, maxLat: 58.0, minLng: 108.0, maxLng: 122.0 }
+        };
+    }
+    
     async geocodeNominatim(address, region = '') {
         if (!CONFIG.GEOCODING?.enabled) return null;
         
         try {
             let normalized = this.normalizeRussianAddress(address, region);
-            normalized = normalized.replace(/,\s*Россия$/i, '');
             
             await new Promise(resolve => 
                 setTimeout(resolve, CONFIG.GEOCODING.delays?.nominatim || 2000));
             
             const queries = this.generateOSMQueries(normalized, region);
-            console.log(`🌍 OSM запросы для "${normalized}":`, queries);
+            console.log(`🌍 OSM запросы для "${normalized.substring(0, 80)}...":`, queries);
             
             for (const query of queries) {
                 try {
                     console.log(`🌍 OSM запрос: ${query.substring(0, 80)}...`);
-                    const result = await this.queryNominatim(query);
+                    const result = await this.queryNominatim(query, region || this.extractRegionFromAddress(address));
                     
                     if (result) {
                         // Проверяем, что координаты в пределах региона
@@ -507,189 +647,341 @@ class GeocodingSystem {
     }
     
     generateOSMQueries(address, region = '') {
-    const queries = new Set();
-    const parts = address.split(',').map(p => p.trim()).filter(p => p.length > 1);
-    
-    console.log(`🔍 Части адреса:`, parts);
-    
-    // Удаляем "Россия" из адреса для OSM
-    let addressWithoutRussia = address.replace(/,\s*Россия$/i, '').trim();
-    if (addressWithoutRussia.length > 10) {
-        queries.add(addressWithoutRussia);
-    }
-    
-    // Ищем ключевые части адреса
-    const regionPart = parts.find(p => 
-        p.toLowerCase().includes('обл') || 
-        p.toLowerCase().includes('край') || 
-        p.toLowerCase().includes('респ')
-    );
-    
-    // Улучшенное определение населенного пункта
-    let settlementPart = null;
-    for (const part of parts) {
-        // Проверяем стандартные сокращения
-        if (part.match(/^(г\.|с\.|п\.|пгт\.|рп\.|д\.)/i)) {
-            settlementPart = part;
-            break;
+        const queries = new Set();
+        
+        // Удаляем "Россия" из адреса для OSM
+        let addressWithoutRussia = address.replace(/,\s*Россия$/i, '').trim();
+        
+        // Разбираем адрес на части
+        const parts = addressWithoutRussia.split(',').map(p => p.trim()).filter(p => p.length > 1);
+        if (parts.length === 0) return [];
+        
+        console.log(`🔍 Части адреса:`, parts);
+        
+        // Анализируем структуру адреса
+        const classified = this.classifyAddressParts(parts);
+        
+        // Извлекаем регион из адреса если не указан
+        const targetRegion = region || classified.region || this.extractRegionFromAddress(address);
+        
+        // 1. Полный адрес без "Россия"
+        if (addressWithoutRussia.length > 5) {
+            queries.add(addressWithoutRussia);
         }
-        // Проверяем названия без сокращений
-        if (part.length > 2 && 
-            !part.includes('обл') && 
-            !part.includes('край') && 
-            !part.includes('ул') && 
-            !part.includes('пр-кт') &&
-            !part.includes('пер') &&
-            !/\d/.test(part) &&
-            part !== regionPart) {
+        
+        // 2. Комбинации с регионом
+        if (targetRegion && classified.settlement) {
+            // Регион + населенный пункт
+            queries.add(`${targetRegion}, ${classified.settlement}`);
             
-            // Проверяем, не является ли это известным городом/селом
-            const knownSettlements = ['мамонтово', 'барнаул', 'новосибирск', 'красноярск'];
-            if (knownSettlements.some(s => part.toLowerCase().includes(s))) {
-                settlementPart = part;
-                // Если нет сокращения, добавляем его
-                if (!settlementPart.match(/^(г\.|с\.|п\.)/i)) {
-                    if (part.toLowerCase().includes('мамонтово')) {
-                        settlementPart = 'с. ' + part;
-                    } else {
-                        settlementPart = 'г. ' + part;
+            if (classified.street) {
+                // Регион + населенный пункт + улица
+                queries.add(`${targetRegion}, ${classified.settlement}, ${classified.street}`);
+                
+                if (classified.house) {
+                    // Полный адрес с регионом
+                    queries.add(`${targetRegion}, ${classified.settlement}, ${classified.street}, ${classified.house}`);
+                }
+            }
+            
+            if (classified.house) {
+                // Регион + населенный пункт + дом
+                queries.add(`${targetRegion}, ${classified.settlement}, ${classified.house}`);
+            }
+        }
+        
+        // 3. Комбинации без региона
+        if (classified.settlement) {
+            // Населенный пункт
+            queries.add(classified.settlement);
+            
+            if (classified.street) {
+                // Населенный пункт + улица
+                queries.add(`${classified.settlement}, ${classified.street}`);
+                
+                if (classified.house) {
+                    // Населенный пункт + улица + дом
+                    queries.add(`${classified.settlement}, ${classified.street}, ${classified.house}`);
+                }
+            }
+            
+            if (classified.house) {
+                // Населенный пункт + дом
+                queries.add(`${classified.settlement}, ${classified.house}`);
+            }
+        }
+        
+        // 4. Улица + дом (если улица есть)
+        if (classified.street && classified.house) {
+            queries.add(`${classified.street}, ${classified.house}`);
+        }
+        
+        // 5. Только улица (если есть)
+        if (classified.street) {
+            queries.add(classified.street);
+        }
+        
+        // 6. Только дом (если это не просто номер)
+        if (classified.house && classified.house.length > 2) {
+            queries.add(classified.house);
+        }
+        
+        // 7. Добавляем район если есть
+        if (classified.other.length > 0) {
+            const district = classified.other.find(p => p.includes('р-н'));
+            if (district && classified.settlement) {
+                queries.add(`${district}, ${classified.settlement}`);
+                
+                if (classified.street) {
+                    queries.add(`${district}, ${classified.settlement}, ${classified.street}`);
+                }
+            }
+        }
+        
+        // 8. Альтернативные варианты улиц (без "ул.")
+        if (classified.street) {
+            const streetWithoutType = classified.street.replace(/^ул\.\s*/i, '');
+            if (streetWithoutType !== classified.street) {
+                queries.add(streetWithoutType);
+                
+                if (classified.house) {
+                    queries.add(`${streetWithoutType}, ${classified.house}`);
+                }
+                
+                if (classified.settlement) {
+                    queries.add(`${classified.settlement}, ${streetWithoutType}`);
+                    
+                    if (classified.house) {
+                        queries.add(`${classified.settlement}, ${streetWithoutType}, ${classified.house}`);
                     }
                 }
-                break;
             }
         }
-    }
-    
-    const streetPart = parts.find(p => 
-        p.match(/^(ул\.|пр-кт\.|пер\.|ш\.|пр-д\.|пл\.|б-р\.)/i)
-    );
-    
-    const housePart = parts.find(p => 
-        /\d+/.test(p) && 
-        !p.match(/^(г\.|с\.|ул\.|пр-кт\.|пер\.)/i) &&
-        !p.toLowerCase().includes('обл') &&
-        !p.toLowerCase().includes('край')
-    );
-    
-    console.log(`🔍 Ключевые части:`, { regionPart, settlementPart, streetPart, housePart });
-    
-    // Собираем осмысленные комбинации
-    if (settlementPart && streetPart && housePart) {
-        // Населенный пункт + улица + дом (самый вероятный)
-        queries.add([settlementPart, streetPart, housePart].join(', '));
         
-        // Если есть регион
-        if (regionPart) {
-            queries.add([regionPart, settlementPart, streetPart, housePart].join(', '));
-        }
-    }
-    
-    if (settlementPart && streetPart) {
-        // Населенный пункт + улица
-        queries.add([settlementPart, streetPart].join(', '));
-        queries.add([streetPart, settlementPart].join(', '));
+        // Фильтруем и сортируем по вероятности успеха (от самых полных к самым коротким)
+        const filteredQueries = Array.from(queries)
+            .filter(q => q && q.length >= 3 && q.length <= 150)
+            .sort((a, b) => {
+                // Сначала более полные адреса
+                const aParts = a.split(',').length;
+                const bParts = b.split(',').length;
+                if (bParts !== aParts) return bParts - aParts;
+                
+                // Затем с регионом
+                const aHasRegion = a.includes('обл.') || a.includes('край') || a.includes('Респ.');
+                const bHasRegion = b.includes('обл.') || b.includes('край') || b.includes('Респ.');
+                if (aHasRegion && !bHasRegion) return -1;
+                if (!aHasRegion && bHasRegion) return 1;
+                
+                // Затем с населенным пунктом
+                const aHasSettlement = /(г\.|с\.|п\.|пгт\.|рп\.|д\.)/i.test(a);
+                const bHasSettlement = /(г\.|с\.|п\.|пгт\.|рп\.|д\.)/i.test(b);
+                if (aHasSettlement && !bHasSettlement) return -1;
+                if (!aHasSettlement && bHasSettlement) return 1;
+                
+                return a.length - b.length;
+            })
+            .slice(0, 6); // Ограничиваем количество запросов
         
-        if (regionPart) {
-            queries.add([regionPart, settlementPart, streetPart].join(', '));
-        }
+        console.log(`🌍 Сгенерированные OSM запросы (${filteredQueries.length}):`, filteredQueries);
+        return filteredQueries;
     }
     
-    if (settlementPart && housePart) {
-        // Населенный пункт + дом
-        queries.add([settlementPart, housePart].join(', '));
-    }
-    
-    if (streetPart && housePart) {
-        // Улица + дом
-        queries.add([streetPart, housePart].join(', '));
-    }
-    
-    // Только населенный пункт
-    if (settlementPart) {
-        queries.add(settlementPart);
+    extractRegionFromAddress(address) {
+        if (!address) return '';
         
-        // Населенный пункт + регион
-        if (regionPart) {
-            queries.add([regionPart, settlementPart].join(', '));
-        }
-    }
-    
-    // Только улица
-    if (streetPart) {
-        queries.add(streetPart);
-    }
-    
-    // Если есть номер дома отдельно
-    if (housePart && housePart.length > 1) {
-        queries.add(housePart);
-    }
-    
-    // Удаляем дубликаты и фильтруем
-    const filteredQueries = Array.from(queries)
-        .filter(q => q && q.length > 3 && q.length < 200)
-        .slice(0, 8); // Ограничиваем количество запросов
-    
-    console.log(`🌍 Сгенерированные OSM запросы:`, filteredQueries);
-    return filteredQueries;
-}
-    
-    async queryNominatim(query) {
-    const encoded = encodeURIComponent(query);
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1&countrycodes=ru&accept-language=ru&addressdetails=1`;
-    
-    console.log(`🌍 OSM запрос: ${query.substring(0, 80)}...`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // Уменьшили таймаут
-    
-    try {
-        const response = await fetch(url, {
-            signal: controller.signal,
-            headers: {
-                'User-Agent': CONFIG.GEOCODING.osmUserAgent || 'TTMapApp/1.0',
-                'Accept': 'application/json',
-                'Referer': window.location.origin || 'https://tt-map-app.example.com'
+        const regionPatterns = [
+            /(Алтайский\s+край)/i,
+            /(Алтайский)/i,
+            /(Архангельская\s+обл)/i,
+            /(Архангельская)/i,
+            /(Астраханская\s+обл)/i,
+            /(Астраханская)/i,
+            /(Белгородская\s+обл)/i,
+            /(Белгородская)/i,
+            /(Брянская\s+обл)/i,
+            /(Брянская)/i,
+            /(Владимирская\s+обл)/i,
+            /(Владимирская)/i,
+            /(Волгоградская\s+обл)/i,
+            /(Волгоградская)/i,
+            /(Вологодская\s+обл)/i,
+            /(Вологодская)/i,
+            /(Воронежская\s+обл)/i,
+            /(Воронежская)/i,
+            /(Ивановская\s+обл)/i,
+            /(Ивановская)/i,
+            /(Иркутская\s+обл)/i,
+            /(Иркутская)/i,
+            /(Калининградская\s+обл)/i,
+            /(Калининградская)/i,
+            /(Калужская\s+обл)/i,
+            /(Калужская)/i,
+            /(Камчатский\s+край)/i,
+            /(Камчатский)/i,
+            /(Кемеровская\s+обл)/i,
+            /(Кемеровская)/i,
+            /(Кировская\s+обл)/i,
+            /(Кировская)/i,
+            /(Костромская\s+обл)/i,
+            /(Костромская)/i,
+            /(Краснодарский\s+край)/i,
+            /(Краснодарский)/i,
+            /(Красноярский\s+край)/i,
+            /(Красноярский)/i,
+            /(Курганская\s+обл)/i,
+            /(Курганская)/i,
+            /(Курская\s+обл)/i,
+            /(Курская)/i,
+            /(Ленинградская\s+обл)/i,
+            /(Ленинградская)/i,
+            /(Липецкая\s+обл)/i,
+            /(Липецкая)/i,
+            /(Магаданская\s+обл)/i,
+            /(Магаданская)/i,
+            /(Московская\s+обл)/i,
+            /(Московская)/i,
+            /(Мурманская\s+обл)/i,
+            /(Мурманская)/i,
+            /(Нижегородская\s+обл)/i,
+            /(Нижегородская)/i,
+            /(Новгородская\s+обл)/i,
+            /(Новгородская)/i,
+            /(Новосибирская\s+обл)/i,
+            /(Новосибирская)/i,
+            /(Омская\s+обл)/i,
+            /(Омская)/i,
+            /(Оренбургская\s+обл)/i,
+            /(Оренбургская)/i,
+            /(Орловская\s+обл)/i,
+            /(Орловская)/i,
+            /(Пензенская\s+обл)/i,
+            /(Пензенская)/i,
+            /(Пермский\s+край)/i,
+            /(Пермский)/i,
+            /(Приморский\s+край)/i,
+            /(Приморский)/i,
+            /(Псковская\s+обл)/i,
+            /(Псковская)/i,
+            /(Ростовская\s+обл)/i,
+            /(Ростовская)/i,
+            /(Рязанская\s+обл)/i,
+            /(Рязанская)/i,
+            /(Самарская\s+обл)/i,
+            /(Самарская)/i,
+            /(Саратовская\s+обл)/i,
+            /(Саратовская)/i,
+            /(Сахалинская\s+обл)/i,
+            /(Сахалинская)/i,
+            /(Свердловская\s+обл)/i,
+            /(Свердловская)/i,
+            /(Смоленская\s+обл)/i,
+            /(Смоленская)/i,
+            /(Тамбовская\s+обл)/i,
+            /(Тамбовская)/i,
+            /(Тверская\s+обл)/i,
+            /(Тверская)/i,
+            /(Томская\s+обл)/i,
+            /(Томская)/i,
+            /(Тульская\s+обл)/i,
+            /(Тульская)/i,
+            /(Тюменская\s+обл)/i,
+            /(Тюменская)/i,
+            /(Ульяновская\s+обл)/i,
+            /(Ульяновская)/i,
+            /(Челябинская\s+обл)/i,
+            /(Челябинская)/i,
+            /(Ярославская\s+обл)/i,
+            /(Ярославская)/i
+        ];
+        
+        for (const pattern of regionPatterns) {
+            const match = address.match(pattern);
+            if (match) {
+                return match[1];
             }
-        });
+        }
         
-        clearTimeout(timeoutId);
+        return '';
+    }
+    
+    async queryNominatim(query, targetRegion = '') {
+        const encoded = encodeURIComponent(query);
+        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encoded}&limit=1&countrycodes=ru&accept-language=ru&addressdetails=1`;
         
-        if (response.ok) {
-            const data = await response.json();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        
+        try {
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': CONFIG.GEOCODING.osmUserAgent || 'TTMapApp/1.0',
+                    'Accept': 'application/json',
+                    'Referer': window.location.origin || 'https://tt-map-app.example.com'
+                }
+            });
             
-            if (data && data.length > 0) {
-                const item = data[0];
-                const lat = parseFloat(item.lat);
-                const lon = parseFloat(item.lon);
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                const data = await response.json();
                 
-                console.log(`✅ OSM результат: ${item.type || 'unknown'} (важность: ${item.importance || 0})`);
-                
-                this.stats.nominatim++;
-                return {
-                    lat: lat,
-                    lng: lon,
-                    source: 'nominatim',
-                    isExact: true,
-                    displayName: item.display_name || ''
-                };
+                if (data && data.length > 0) {
+                    const item = data[0];
+                    const lat = parseFloat(item.lat);
+                    const lon = parseFloat(item.lon);
+                    
+                    console.log(`✅ OSM результат: ${item.type || 'unknown'} (важность: ${item.importance || 0})`);
+                    if (item.display_name) {
+                        console.log(`📍 Найден: ${item.display_name.substring(0, 80)}...`);
+                    }
+                    
+                    // Если указан целевой регион, проверяем дополнительно
+                    if (targetRegion) {
+                        // Проверяем по границам региона
+                        if (!this.isValidCoordinateForRegion(lat, lon, targetRegion)) {
+                            console.warn(`❌ OSM: координаты вне целевого региона ${targetRegion}`);
+                            
+                            // Проверяем, может быть в найденных данных есть указание на регион
+                            if (item.address) {
+                                const foundRegion = item.address.state || item.address.region || '';
+                                if (foundRegion && !foundRegion.toLowerCase().includes(targetRegion.toLowerCase())) {
+                                    console.warn(`📍 Найден в другом регионе: ${foundRegion}`);
+                                    return null;
+                                }
+                            }
+                        }
+                    }
+                    
+                    this.stats.nominatim++;
+                    return {
+                        lat: lat,
+                        lng: lon,
+                        source: 'nominatim',
+                        isExact: item.importance > 0.3, // Более высокая важность = более точный результат
+                        displayName: item.display_name || ''
+                    };
+                }
+            } else if (response.status === 503 || response.status === 504) {
+                console.warn(`⚠️ OSM временно недоступен (${response.status})`);
+                throw new Error('OSM service unavailable');
+            } else {
+                console.warn(`⚠️ OSM ошибка: ${response.status}`);
             }
-        } else if (response.status === 503 || response.status === 504) {
-            console.warn(`⚠️ OSM временно недоступен (${response.status})`);
-            throw new Error('OSM service unavailable');
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.warn('⏰ Таймаут OSM запроса');
+            } else if (error.message === 'OSM service unavailable') {
+                throw error;
+            } else {
+                console.warn('⚠️ Ошибка OSM запроса:', error.message);
+            }
+            throw error;
         }
-    } catch (error) {
-        if (error.name === 'AbortError') {
-            console.warn('⏰ Таймаут OSM запроса');
-        } else if (error.message === 'OSM service unavailable') {
-            throw error; // Перебрасываем дальше
-        } else {
-            console.warn('⚠️ Ошибка OSM запроса:', error.message);
-        }
-        throw error;
+        
+        return null;
     }
-    
-    return null;
-}
     
     async geocodeOverpassAPI(address, region = '') {
         if (!CONFIG.GEOCODING?.alternativeServices?.osmOverpass) {
@@ -700,24 +992,25 @@ class GeocodingSystem {
             const settlementName = this.extractSettlementName(address);
             if (!settlementName) return null;
             
-            console.log(`🗺️  Overpass ищет: ${settlementName}`);
+            console.log(`🗺️  Overpass ищет населенный пункт: ${settlementName}`);
             
-            const overpassQuery = `
+            // Сначала ищем точное совпадение
+            let overpassQuery = `
                 [out:json][timeout:25];
                 area["ISO3166-1"="RU"]->.russia;
                 (
-                    node["place"~"city|town|village|hamlet"]["name"~"${settlementName}",i](area.russia);
-                    way["place"~"city|town|village|hamlet"]["name"~"${settlementName}",i](area.russia);
+                    node["place"~"city|town|village|hamlet"]["name"="${settlementName}"](area.russia);
+                    way["place"~"city|town|village|hamlet"]["name"="${settlementName}"](area.russia);
                 );
                 out center;
             `;
             
-            const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+            let url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
             
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 20000);
             
-            const response = await fetch(url, { signal: controller.signal });
+            let response = await fetch(url, { signal: controller.signal });
             clearTimeout(timeoutId);
             
             if (response.ok) {
@@ -729,10 +1022,64 @@ class GeocodingSystem {
                     const lon = element.lon || element.center?.lon;
                     
                     if (lat && lon) {
-                        console.log(`✅ Overpass нашел: ${settlementName} (${lat.toFixed(6)}, ${lon.toFixed(6)})`);
+                        // Проверяем регион
+                        if (this.isValidCoordinateForRegion(lat, lon, region || address)) {
+                            console.log(`✅ Overpass нашел точное совпадение: ${settlementName} (${lat.toFixed(6)}, ${lon.toFixed(6)})`);
+                            
+                            this.stats.overpass++;
+                            return {
+                                lat: lat,
+                                lng: lon,
+                                source: 'overpass',
+                                isExact: false, // Населенный пункт без улицы = приблизительно
+                                settlement: settlementName
+                            };
+                        }
+                    }
+                }
+            }
+            
+            // Если не нашли точное совпадение, пробуем частичное
+            console.log(`🔄 Overpass пробует частичный поиск: ${settlementName}`);
+            
+            overpassQuery = `
+                [out:json][timeout:25];
+                area["ISO3166-1"="RU"]->.russia;
+                (
+                    node["place"~"city|town|village|hamlet"]["name"~"${settlementName}"](area.russia);
+                    way["place"~"city|town|village|hamlet"]["name"~"${settlementName}"](area.russia);
+                );
+                out center;
+            `;
+            
+            url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+            
+            const controller2 = new AbortController();
+            const timeoutId2 = setTimeout(() => controller2.abort(), 20000);
+            
+            response = await fetch(url, { signal: controller2.signal });
+            clearTimeout(timeoutId2);
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.elements && data.elements.length > 0) {
+                    // Выбираем самый крупный населенный пункт
+                    const elements = data.elements.sort((a, b) => {
+                        const aType = a.tags?.place || '';
+                        const bType = b.tags?.place || '';
+                        const typePriority = {city: 4, town: 3, village: 2, hamlet: 1};
+                        return (typePriority[bType] || 0) - (typePriority[aType] || 0);
+                    });
+                    
+                    const element = elements[0];
+                    const lat = element.lat || element.center?.lat;
+                    const lon = element.lon || element.center?.lon;
+                    
+                    if (lat && lon && this.isValidCoordinateForRegion(lat, lon, region || address)) {
+                        console.log(`✅ Overpass нашел частичное совпадение: ${settlementName} (${lat.toFixed(6)}, ${lon.toFixed(6)})`);
                         
                         this.stats.overpass++;
-                        
                         return {
                             lat: lat,
                             lng: lon,
@@ -752,56 +1099,61 @@ class GeocodingSystem {
     }
     
     extractSettlementName(address) {
-    if (!address) return null;
-    
-    // Удаляем "Россия" и прочее
-    const cleanAddress = address.replace(/,\s*Россия$/i, '');
-    
-    // Ищем населенный пункт после региона
-    const parts = cleanAddress.split(',').map(p => p.trim());
-    
-    for (const part of parts) {
-        // Проверяем сокращения
-        if (part.match(/^(г\.|с\.|п\.|пгт\.|рп\.|д\.)/i)) {
-            const name = part.replace(/^(г\.|с\.|п\.|пгт\.|рп\.|д\.)\s*/i, '').trim();
-            if (name.length > 2) return name;
-        }
+        if (!address) return null;
         
-        // Проверяем названия городов без сокращений
-        const knownSettlements = [
-            'мамонтово', 'барнаул', 'новосибирск', 'красноярск', 
-            'омск', 'томск', 'кемерово', 'новокузнецк'
-        ];
+        // Сначала пробуем извлечь из нормализованного адреса
+        const normalized = this.normalizeRussianAddress(address, '');
+        const parts = normalized.split(',').map(p => p.trim());
         
-        for (const settlement of knownSettlements) {
-            if (part.toLowerCase().includes(settlement)) {
-                // Ищем слово целиком
-                const words = part.split(/\s+/);
-                for (const word of words) {
-                    if (word.toLowerCase() === settlement && word.length > 2) {
-                        return word;
-                    }
+        // Ищем населенный пункт с сокращением
+        for (const part of parts) {
+            const match = part.match(/^(г\.|с\.|п\.|пгт\.|рп\.|д\.)\s*(.+)/i);
+            if (match && match[2]) {
+                const name = match[2].trim();
+                if (name.length > 1 && !/\d/.test(name)) {
+                    return name;
                 }
-                return settlement;
             }
         }
-    }
-    
-    // Если не нашли, берем первое слово после региона
-    const regionIndex = parts.findIndex(p => 
-        p.includes('обл') || p.includes('край') || p.includes('Респ')
-    );
-    
-    if (regionIndex !== -1 && parts.length > regionIndex + 1) {
-        const nextPart = parts[regionIndex + 1];
-        // Проверяем, что это не улица
-        if (!nextPart.match(/^(ул\.|пр-кт\.|пер\.)/i) && !/\d/.test(nextPart)) {
-            return nextPart.replace(/^(г\.|с\.|п\.)\s*/i, '').trim();
+        
+        // Ищем названия известных населенных пунктов
+        const knownSettlements = [
+            'мамонтово', 'барнаул', 'новосибирск', 'омск', 'томск', 
+            'кемерово', 'новокузнецк', 'красноярск', 'иркутск',
+            'москва', 'санкт-петербург', 'екатеринбург', 'нижний новгород',
+            'казань', 'челябинск', 'самара', 'ростов-на-дону', 'уфа',
+            'волгоград', 'пермь', 'воронеж', 'краснодар', 'саратов',
+            'тюмень', 'тольятти', 'ижевск', 'брянск', 'владимир',
+            'архангельск', 'астрахань', 'белгород', 'вологда',
+            'калининград', 'курск', 'липецк', 'оренбург', 'пенза',
+            'рязань', 'тамбов', 'тверь', 'тула', 'ульяновск', 'ярославль'
+        ];
+        
+        for (const part of parts) {
+            for (const settlement of knownSettlements) {
+                if (part.toLowerCase().includes(settlement)) {
+                    return settlement.charAt(0).toUpperCase() + settlement.slice(1);
+                }
+            }
         }
+        
+        // Ищем любое слово, не похожее на улицу/регион/дом
+        for (const part of parts) {
+            if (part.length > 2 && 
+                !part.includes('обл.') && 
+                !part.includes('край') && 
+                !part.includes('ул.') && 
+                !part.includes('пр-кт.') &&
+                !part.includes('пер.') &&
+                !/\d/.test(part) &&
+                !part.includes('р-н') &&
+                !part.includes('район')) {
+                return part;
+            }
+        }
+        
+        return null;
     }
-    
-    return null;
-}
     
     async geocode(address, region = '', pointId = null) {
         if (!CONFIG.GEOCODING?.enabled || !address) {
@@ -819,11 +1171,26 @@ class GeocodingSystem {
         
         const normalized = this.normalizeRussianAddress(address, region);
         
-        // Новый порядок: сначала OSM, потом Яндекс, потом Overpass
+        // Улучшенный порядок: сначала OSM с проверкой региона, потом Яндекс, потом Overpass
         const serviceOrder = [
-            { name: 'nominatim', func: () => this.geocodeNominatim(address, region) },
-            { name: 'yandex', func: () => this.geocodeYandex(address, region) },
-            { name: 'overpass', func: () => this.geocodeOverpassAPI(address, region) }
+            { 
+                name: 'nominatim', 
+                func: () => this.geocodeNominatim(address, region),
+                retryCount: 0,
+                maxRetries: 2
+            },
+            { 
+                name: 'yandex', 
+                func: () => this.geocodeYandex(address, region),
+                retryCount: 0,
+                maxRetries: 1
+            },
+            { 
+                name: 'overpass', 
+                func: () => this.geocodeOverpassAPI(address, region),
+                retryCount: 0,
+                maxRetries: 1
+            }
         ];
         
         let result = null;
@@ -841,6 +1208,15 @@ class GeocodingSystem {
                 
             } catch (error) {
                 console.warn(`⚠️ ${service.name} ошибка:`, error.message);
+                
+                // Пробуем повторить при временных ошибках
+                if (service.retryCount < service.maxRetries && 
+                    (error.message.includes('unavailable') || error.name === 'AbortError')) {
+                    service.retryCount++;
+                    console.log(`🔄 Повторная попытка ${service.name} (${service.retryCount}/${service.maxRetries})...`);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    continue;
+                }
                 continue;
             }
             
@@ -872,27 +1248,110 @@ class GeocodingSystem {
     
     getApproximateCoordinates(address, region = '') {
         const regionCoords = {
+            // Центральные
             'Москва': { lat: 55.7558, lng: 37.6173, radius: 0.03 },
             'Московская': { lat: 55.7558, lng: 37.6173, radius: 0.2 },
             'Санкт-Петербург': { lat: 59.9343, lng: 30.3351, radius: 0.03 },
             'Ленинградская': { lat: 59.9343, lng: 30.3351, radius: 0.2 },
-            'Алтайский': { lat: 53.3481, lng: 83.7794, radius: 0.3 },
-            'Краснодарский': { lat: 45.0355, lng: 38.9753, radius: 0.2 },
-            'Свердловская': { lat: 56.8389, lng: 60.6057, radius: 0.2 },
-            'Ростовская': { lat: 47.2224, lng: 39.7189, radius: 0.2 },
+            
+            // Сибирь
+            'Алтайский': { lat: 53.3481, lng: 83.7794, radius: 0.5 },
+            'Красноярский': { lat: 56.0184, lng: 92.8672, radius: 1.0 },
+            'Новосибирская': { lat: 55.0084, lng: 82.9357, radius: 0.5 },
+            'Иркутская': { lat: 52.2864, lng: 104.2807, radius: 1.0 },
+            'Омская': { lat: 54.9885, lng: 73.3686, radius: 0.5 },
+            'Томская': { lat: 56.4846, lng: 84.9482, radius: 0.5 },
+            'Кемеровская': { lat: 55.3547, lng: 86.0873, radius: 0.3 },
+            
+            // Урал
+            'Свердловская': { lat: 56.8389, lng: 60.6057, radius: 0.3 },
+            'Челябинская': { lat: 55.1644, lng: 61.4368, radius: 0.3 },
+            'Тюменская': { lat: 57.1530, lng: 65.5343, radius: 0.5 },
+            'Пермский': { lat: 58.0105, lng: 56.2502, radius: 0.4 },
+            
+            // Поволжье
             'Татарстан': { lat: 55.7961, lng: 49.1064, radius: 0.2 },
-            'Челябинская': { lat: 55.1644, lng: 61.4368, radius: 0.2 },
-            'Архангельская': { lat: 64.5393, lng: 40.5187, radius: 0.5 },
-            'Астраханская': { lat: 46.3479, lng: 48.0336, radius: 0.3 },
+            'Самарская': { lat: 53.1951, lng: 50.1069, radius: 0.2 },
+            'Нижегородская': { lat: 56.3269, lng: 44.0065, radius: 0.3 },
+            'Башкортостан': { lat: 54.7351, lng: 55.9587, radius: 0.3 },
+            
+            // Юг
+            'Краснодарский': { lat: 45.0355, lng: 38.9753, radius: 0.2 },
+            'Ростовская': { lat: 47.2224, lng: 39.7189, radius: 0.2 },
+            'Ставропольский': { lat: 45.0445, lng: 41.9691, radius: 0.2 },
+            'Волгоградская': { lat: 48.7080, lng: 44.5133, radius: 0.3 },
+            
+            // Центральная Россия
+            'Воронежская': { lat: 51.6615, lng: 39.2003, radius: 0.2 },
             'Белгородская': { lat: 50.5952, lng: 36.5872, radius: 0.2 },
+            'Курская': { lat: 51.7309, lng: 36.1936, radius: 0.2 },
+            'Липецкая': { lat: 52.6088, lng: 39.5992, radius: 0.2 },
+            'Тамбовская': { lat: 52.7212, lng: 41.4523, radius: 0.2 },
+            'Тульская': { lat: 54.1931, lng: 37.6173, radius: 0.2 },
+            'Рязанская': { lat: 54.6294, lng: 39.7417, radius: 0.2 },
+            'Орловская': { lat: 52.9671, lng: 36.0697, radius: 0.2 },
             'Брянская': { lat: 53.2434, lng: 34.3642, radius: 0.2 },
+            'Смоленская': { lat: 54.7826, lng: 32.0453, radius: 0.2 },
+            'Калужская': { lat: 54.5138, lng: 36.2612, radius: 0.2 },
             'Владимирская': { lat: 56.1290, lng: 40.4070, radius: 0.2 },
-            'default': { lat: 55.7558, lng: 37.6173, radius: 2.0 }
+            'Ивановская': { lat: 57.0003, lng: 40.9739, radius: 0.2 },
+            'Костромская': { lat: 57.7679, lng: 40.9269, radius: 0.3 },
+            'Ярославская': { lat: 57.6261, lng: 39.8845, radius: 0.2 },
+            'Тверская': { lat: 56.8587, lng: 35.9176, radius: 0.3 },
+            
+            // Северо-Запад
+            'Архангельская': { lat: 64.5393, lng: 40.5187, radius: 0.5 },
+            'Вологодская': { lat: 59.2181, lng: 39.8886, radius: 0.5 },
+            'Мурманская': { lat: 68.9585, lng: 33.0827, radius: 0.5 },
+            'Карелия': { lat: 61.7851, lng: 34.3469, radius: 0.5 },
+            'Псковская': { lat: 57.8194, lng: 28.3324, radius: 0.3 },
+            'Новгородская': { lat: 58.5223, lng: 31.2698, radius: 0.3 },
+            
+            // Приволжье
+            'Кировская': { lat: 58.6035, lng: 49.6680, radius: 0.3 },
+            'Удмуртская': { lat: 56.8527, lng: 53.2045, radius: 0.2 },
+            'Чувашская': { lat: 56.1439, lng: 47.2489, radius: 0.2 },
+            'Марий Эл': { lat: 56.6340, lng: 47.8995, radius: 0.2 },
+            'Мордовия': { lat: 54.1808, lng: 45.1862, radius: 0.2 },
+            'Пензенская': { lat: 53.1951, lng: 45.0183, radius: 0.2 },
+            'Ульяновская': { lat: 54.3142, lng: 48.3970, radius: 0.2 },
+            'Оренбургская': { lat: 51.7872, lng: 55.1017, radius: 0.3 },
+            'Саратовская': { lat: 51.5335, lng: 46.0343, radius: 0.3 },
+            
+            // Северный Кавказ
+            'Дагестан': { lat: 42.9849, lng: 47.5047, radius: 0.2 },
+            'Чеченская': { lat: 43.3180, lng: 45.6919, radius: 0.1 },
+            'Ингушетия': { lat: 43.1151, lng: 44.9010, radius: 0.1 },
+            'Северная Осетия': { lat: 43.0241, lng: 44.6814, radius: 0.1 },
+            'Кабардино-Балкария': { lat: 43.4853, lng: 43.6071, radius: 0.1 },
+            'Карачаево-Черкесия': { lat: 43.7738, lng: 41.9144, radius: 0.1 },
+            'Адыгея': { lat: 44.6098, lng: 40.1006, radius: 0.1 },
+            'Калмыкия': { lat: 46.2313, lng: 45.3270, radius: 0.2 },
+            'Крым': { lat: 45.0433, lng: 34.6021, radius: 0.2 },
+            
+            // Дальний Восток
+            'Приморский': { lat: 43.1332, lng: 131.9113, radius: 0.5 },
+            'Хабаровский': { lat: 48.4647, lng: 135.0598, radius: 0.5 },
+            'Амурская': { lat: 50.2907, lng: 127.5272, radius: 0.5 },
+            'Сахалинская': { lat: 50.6902, lng: 142.9501, radius: 0.5 },
+            'Камчатский': { lat: 53.0374, lng: 158.6559, radius: 1.0 },
+            'Магаданская': { lat: 59.5602, lng: 150.7986, radius: 0.5 },
+            'Чукотский': { lat: 66.0000, lng: 169.0000, radius: 2.0 },
+            'Еврейская': { lat: 48.4802, lng: 132.1387, radius: 0.3 },
+            'Забайкальский': { lat: 52.0340, lng: 113.5006, radius: 0.5 },
+            
+            // Другие
+            'Астраханская': { lat: 46.3479, lng: 48.0336, radius: 0.3 },
+            'Курганская': { lat: 55.4410, lng: 65.3411, radius: 0.2 },
+            'Ханты-Мансийский': { lat: 61.0032, lng: 69.0189, radius: 1.0 },
+            'Ямало-Ненецкий': { lat: 66.5494, lng: 66.6148, radius: 1.0 },
+            
+            'default': { lat: 55.7558, lng: 37.6173, radius: 3.0 }
         };
         
         let baseLat = 55.7558;
         let baseLng = 37.6173;
-        let radius = 2.0;
+        let radius = 3.0;
         
         const searchText = (region || address || '').toLowerCase();
         
@@ -1066,6 +1525,9 @@ class GeocodingSystem {
         showNotification('Кэш геокодирования очищен', 'success');
     }
 }
+
+// Остальной код остается без изменений...
+// [Здесь должен быть оставшийся код из предыдущего файла app.js, начиная с функции initApp()]
 
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
 
@@ -1877,359 +2339,358 @@ function searchPoints() {
         }
     }
     
-    showNotification(`Найдено ${results.length} точек`, 'success');
-}
-
-// ========== ИНФОРМАЦИЯ О ТОЧКЕ ==========
-
-function showPointDetails(point) {
-    const container = document.getElementById('point-details');
-    const infoSection = document.getElementById('point-info');
-    
-    if (!container || !infoSection) return;
-    
-    let color = CONFIG.STATUS_COLORS.default;
-    const status = point.status || '';
-    
-    if (status === 'Активная') {
-        color = CONFIG.STATUS_COLORS['Активная'] || '#2ecc71';
-    } else if (status === 'На паузе') {
-        color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
+    showNotification(`Найдено ${results.length} точек', 'success`);
     }
     
-    container.innerHTML = `
-        <div style="margin-bottom: 15px;">
-            <h5 style="color: white; margin-bottom: 5px;">${point.name || 'Без названия'}</h5>
-            ${point.status ? `
-                <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
-                    ${point.status}
-                </span>
-            ` : ''}
-        </div>
+    // ========== ИНФОРМАЦИЯ О ТОЧКЕ ==========
+    
+    function showPointDetails(point) {
+        const container = document.getElementById('point-details');
+        const infoSection = document.getElementById('point-info');
         
-        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
-            ${point.address ? `
-                <p style="margin-bottom: 8px;">
-                    <strong>📍 Адрес:</strong><br>
-                    <span style="font-size: 14px;">${point.address.substring(0, 100)}${point.address.length > 100 ? '...' : ''}</span>
-                </p>
-            ` : ''}
-            
-            ${point.lat && point.lng ? `
-                <p style="margin: 0;">
-                    <strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
-                </p>
-            ` : ''}
-        </div>
+        if (!container || !infoSection) return;
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
-            ${point.region ? `
-                <div>
-                    <strong>Регион:</strong><br>
-                    ${point.region}
-                </div>
-            ` : ''}
-            
-            ${point.manager ? `
-                <div>
-                    <strong>Менеджер:</strong><br>
-                    ${point.manager}
-                </div>
-            ` : ''}
-            
-            ${point.contractor ? `
-                <div>
-                    <strong>Подрядчик:</strong><br>
-                    ${point.contractor}
-                </div>
-            ` : ''}
-            
-            ${point.geocodingSource ? `
-                <div>
-                    <strong>Источник:</strong><br>
-                    ${point.geocodingSource}
-                </div>
-            ` : ''}
-        </div>
+        let color = CONFIG.STATUS_COLORS.default;
+        const status = point.status || '';
         
-        ${point.isMock ? `
-            <div style="margin-top: 15px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px;">
-                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
-            </div>
-        ` : ''}
-    `;
-    
-    infoSection.style.display = 'block';
-}
-
-// ========== СТАТИСТИКА ==========
-
-function updateStatistics() {
-    const filteredPoints = filterPoints();
-    const shownPoints = filteredPoints.filter(p => p.lat && p.lng).length;
-    const exactPoints = filteredPoints.filter(p => p.lat && p.lng && !p.isMock).length;
-    const approximatePoints = filteredPoints.filter(p => p.isMock).length;
-    
-    const totalPointsElement = document.getElementById('total-points');
-    const shownPointsElement = document.getElementById('shown-points');
-    const accuracyElement = document.getElementById('accuracy-stats');
-    
-    if (totalPointsElement) totalPointsElement.textContent = allPoints.length;
-    if (shownPointsElement) shownPointsElement.textContent = shownPoints;
-    if (accuracyElement) accuracyElement.textContent = `${exactPoints}/${approximatePoints}`;
-}
-
-function updateGeocodingStats() {
-    if (!geocodingSystem) return;
-    
-    const totalPoints = allPoints.length;
-    const exactCoords = allPoints.filter(p => p.lat && p.lng && !p.isMock).length;
-    const mockCoords = allPoints.filter(p => p.isMock).length;
-    
-    const statsElement = document.getElementById('geocoding-stats');
-    if (!statsElement) return;
-    
-    const stats = geocodingSystem.stats;
-    
-    statsElement.innerHTML = `
-        <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-            <div style="font-size: 12px; color: #95a5a6; margin-bottom: 5px;">
-                <i class="fas fa-map-marker-alt"></i> Статистика координат:
-            </div>
-            <div style="display: flex; gap: 15px; font-size: 11px;">
-                <div>
-                    <span style="color: #2ecc71;">●</span> Точные: ${exactCoords}
-                </div>
-                <div>
-                    <span style="color: #f39c12;">●</span> Приблизительные: ${mockCoords}
-                </div>
-                <div>
-                    <span style="color: #e74c3c;">●</span> Без координат: ${totalPoints - exactCoords - mockCoords}
-                </div>
-            </div>
-            <div style="margin-top: 8px; font-size: 10px; color: #7f8c8d;">
-                <div>Кэш: ${stats.cached}</div>
-                <div>Яндекс: ${stats.yandex} | OSM: ${stats.nominatim}</div>
-            </div>
-        </div>
-    `;
-}
-
-function updateLegend() {
-    const container = document.getElementById('legend');
-    if (!container) return;
-    
-    let legendHTML = '';
-    const statuses = new Set();
-    
-    allPoints.forEach(point => {
-        if (point.status) statuses.add(point.status);
-    });
-    
-    ['Активная', 'На паузе', 'Закрыта', 'План'].forEach(status => {
-        if (!statuses.has(status)) statuses.add(status);
-    });
-    
-    Array.from(statuses).sort().forEach(status => {
-        let color = CONFIG.STATUS_COLORS[status] || CONFIG.STATUS_COLORS.default;
-        
-        legendHTML += `
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                <div style="width: 15px; height: 15px; border-radius: 50%; background: ${color}; border: 2px solid white;"></div>
-                <span style="font-size: 12px;">${status}</span>
-            </div>
-        `;
-    });
-    
-    container.innerHTML = legendHTML;
-}
-
-// ========== АВТООБНОВЛЕНИЕ ==========
-
-function setupAutoUpdate() {
-    if (CONFIG.UPDATE?.auto) {
-        updateInterval = setInterval(loadData, CONFIG.UPDATE.interval);
-        console.log('Автообновление настроено');
-    }
-}
-
-// ========== ДЕМО-ДАННЫЕ ==========
-
-function showDemoData() {
-    console.log('Показываем демо-данные...');
-    
-    allPoints = [
-        {
-            id: 'demo_1',
-            name: 'Магнит №123',
-            region: 'Москва',
-            address: 'ул. Тверская, д. 1',
-            status: 'Активная',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            lat: 55.7570,
-            lng: 37.6145,
-            isMock: false,
-            geocodingSource: 'demo'
-        },
-        {
-            id: 'demo_2',
-            name: 'Магнит №124',
-            region: 'Московская обл.',
-            address: 'г. Химки, ул. Ленина, 25',
-            status: 'Активная',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            lat: 55.8890,
-            lng: 37.4450,
-            isMock: false,
-            geocodingSource: 'demo'
-        },
-        {
-            id: 'demo_3',
-            name: 'Басенджи',
-            region: 'Алтайский край',
-            address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
-            status: 'Активная',
-            manager: 'Казак Светлана',
-            contractor: 'Дмитриев Александр',
-            lat: 53.3481 + (Math.random() - 0.5) * 0.5,
-            lng: 83.7794 + (Math.random() - 0.5) * 1.0,
-            isMock: true,
-            geocodingSource: 'approximate'
+        if (status === 'Активная') {
+            color = CONFIG.STATUS_COLORS['Активная'] || '#2ecc71';
+        } else if (status === 'На паузе') {
+            color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
         }
-    ];
-    
-    updateFilters();
-    updateStatistics();
-    updateLegend();
-    updateGeocodingStats();
-    showPointsOnMap();
-    
-    updateStatus('Демо-данные загружены');
-    showNotification('Используются демо-данные', 'warning');
-}
-
-// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
-
-function getRandomCoordinate(address, region = '') {
-    if (geocodingSystem) {
-        return geocodingSystem.getApproximateCoordinates(address, region);
+        
+        container.innerHTML = \`
+            <div style="margin-bottom: 15px;">
+                <h5 style="color: white; margin-bottom: 5px;">\${point.name || 'Без названия'}</h5>
+                \${point.status ? \`
+                    <span style="background: \${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                        \${point.status}
+                    </span>
+                \` : ''}
+            </div>
+            
+            <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                \${point.address ? \`
+                    <p style="margin-bottom: 8px;">
+                        <strong>📍 Адрес:</strong><br>
+                        <span style="font-size: 14px;">\${point.address.substring(0, 100)}\${point.address.length > 100 ? '...' : ''}</span>
+                    </p>
+                \` : ''}
+                
+                \${point.lat && point.lng ? \`
+                    <p style="margin: 0;">
+                        <strong>Координаты:</strong> \${point.lat.toFixed(6)}, \${point.lng.toFixed(6)}
+                    </p>
+                \` : ''}
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                \${point.region ? \`
+                    <div>
+                        <strong>Регион:</strong><br>
+                        \${point.region}
+                    </div>
+                \` : ''}
+                
+                \${point.manager ? \`
+                    <div>
+                        <strong>Менеджер:</strong><br>
+                        \${point.manager}
+                    </div>
+                \` : ''}
+                
+                \${point.contractor ? \`
+                    <div>
+                        <strong>Подрядчик:</strong><br>
+                        \${point.contractor}
+                    </div>
+                \` : ''}
+                
+                \${point.geocodingSource ? \`
+                    <div>
+                        <strong>Источник:</strong><br>
+                        \${point.geocodingSource}
+                    </div>
+                \` : ''}
+            </div>
+            
+            \${point.isMock ? \`
+                <div style="margin-top: 15px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px;">
+                    <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
+                </div>
+            \` : ''}
+        \`;
+        
+        infoSection.style.display = 'block';
     }
     
-    const randomLat = 55.7558 + (Math.random() - 0.5) * 2.0;
-    const randomLng = 37.6173 + (Math.random() - 0.5) * 4.0;
+    // ========== СТАТИСТИКА ==========
     
-    return {
-        lat: randomLat,
-        lng: randomLng,
-        source: 'random',
-        isExact: false,
-        isMock: true
-    };
-}
-
-// ========== УПРАВЛЕНИЕ ГЕОКОДИРОВАНИЕМ ==========
-
-function startManualGeocoding() {
-    if (!geocodingSystem) {
-        showNotification('Система геокодирования не инициализирована', 'warning');
-        return;
+    function updateStatistics() {
+        const filteredPoints = filterPoints();
+        const shownPoints = filteredPoints.filter(p => p.lat && p.lng).length;
+        const exactPoints = filteredPoints.filter(p => p.lat && p.lng && !p.isMock).length;
+        const approximatePoints = filteredPoints.filter(p => p.isMock).length;
+        
+        const totalPointsElement = document.getElementById('total-points');
+        const shownPointsElement = document.getElementById('shown-points');
+        const accuracyElement = document.getElementById('accuracy-stats');
+        
+        if (totalPointsElement) totalPointsElement.textContent = allPoints.length;
+        if (shownPointsElement) shownPointsElement.textContent = shownPoints;
+        if (accuracyElement) accuracyElement.textContent = \`\${exactPoints}/\${approximatePoints}\`;
     }
     
-    const pointsToGeocode = allPoints.filter(p => 
-        p.address && (p.isMock || !p.lat || !p.lng)
-    );
-    
-    if (pointsToGeocode.length === 0) {
-        showNotification('Нет точек для уточнения координат', 'info');
-        return;
+    function updateGeocodingStats() {
+        if (!geocodingSystem) return;
+        
+        const totalPoints = allPoints.length;
+        const exactCoords = allPoints.filter(p => p.lat && p.lng && !p.isMock).length;
+        const mockCoords = allPoints.filter(p => p.isMock).length;
+        
+        const statsElement = document.getElementById('geocoding-stats');
+        if (!statsElement) return;
+        
+        const stats = geocodingSystem.stats;
+        
+        statsElement.innerHTML = \`
+            <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                <div style="font-size: 12px; color: #95a5a6; margin-bottom: 5px;">
+                    <i class="fas fa-map-marker-alt"></i> Статистика координат:
+                </div>
+                <div style="display: flex; gap: 15px; font-size: 11px;">
+                    <div>
+                        <span style="color: #2ecc71;">●</span> Точные: \${exactCoords}
+                    </div>
+                    <div>
+                        <span style="color: #f39c12;">●</span> Приблизительные: \${mockCoords}
+                    </div>
+                    <div>
+                        <span style="color: #e74c3c;">●</span> Без координат: \${totalPoints - exactCoords - mockCoords}
+                    </div>
+                </div>
+                <div style="margin-top: 8px; font-size: 10px; color: #7f8c8d;">
+                    <div>Кэш: \${stats.cached}</div>
+                    <div>Яндекс: \${stats.yandex} | OSM: \${stats.nominatim}</div>
+                </div>
+            </div>
+        \`;
     }
     
-    showNotification(`Уточнение координат для ${pointsToGeocode.length} точек...`, 'info');
-    
-    pointsToGeocode.forEach(point => {
-        geocodingSystem.addToQueue(point);
-    });
-    
-    if (!geocodingSystem.processing) {
-        geocodingSystem.processQueue();
+    function updateLegend() {
+        const container = document.getElementById('legend');
+        if (!container) return;
+        
+        let legendHTML = '';
+        const statuses = new Set();
+        
+        allPoints.forEach(point => {
+            if (point.status) statuses.add(point.status);
+        });
+        
+        ['Активная', 'На паузе', 'Закрыта', 'План'].forEach(status => {
+            if (!statuses.has(status)) statuses.add(status);
+        });
+        
+        Array.from(statuses).sort().forEach(status => {
+            let color = CONFIG.STATUS_COLORS[status] || CONFIG.STATUS_COLORS.default;
+            
+            legendHTML += \`
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <div style="width: 15px; height: 15px; border-radius: 50%; background: \${color}; border: 2px solid white;"></div>
+                    <span style="font-size: 12px;">\${status}</span>
+                </div>
+            \`;
+        });
+        
+        container.innerHTML = legendHTML;
     }
-}
-
-function clearGeocodingCache() {
-    if (confirm('Очистить кэш геокодирования?')) {
+    
+    // ========== АВТООБНОВЛЕНИЕ ==========
+    
+    function setupAutoUpdate() {
+        if (CONFIG.UPDATE?.auto) {
+            updateInterval = setInterval(loadData, CONFIG.UPDATE.interval);
+            console.log('Автообновление настроено');
+        }
+    }
+    
+    // ========== ДЕМО-ДАННЫЕ ==========
+    
+    function showDemoData() {
+        console.log('Показываем демо-данные...');
+        
+        allPoints = [
+            {
+                id: 'demo_1',
+                name: 'Магнит №123',
+                region: 'Москва',
+                address: 'ул. Тверская, д. 1',
+                status: 'Активная',
+                manager: 'Иванов И.И.',
+                contractor: 'Иванов И.И.',
+                lat: 55.7570,
+                lng: 37.6145,
+                isMock: false,
+                geocodingSource: 'demo'
+            },
+            {
+                id: 'demo_2',
+                name: 'Магнит №124',
+                region: 'Московская обл.',
+                address: 'г. Химки, ул. Ленина, 25',
+                status: 'Активная',
+                manager: 'Иванов И.И.',
+                contractor: 'Иванов И.И.',
+                lat: 55.8890,
+                lng: 37.4450,
+                isMock: false,
+                geocodingSource: 'demo'
+            },
+            {
+                id: 'demo_3',
+                name: 'Басенджи',
+                region: 'Алтайский край',
+                address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
+                status: 'Активная',
+                manager: 'Казак Светлана',
+                contractor: 'Дмитриев Александр',
+                lat: 53.3481 + (Math.random() - 0.5) * 0.5,
+                lng: 83.7794 + (Math.random() - 0.5) * 1.0,
+                isMock: true,
+                geocodingSource: 'approximate'
+            }
+        ];
+        
+        updateFilters();
+        updateStatistics();
+        updateLegend();
+        updateGeocodingStats();
+        showPointsOnMap();
+        
+        updateStatus('Демо-данные загружены');
+        showNotification('Используются демо-данные', 'warning');
+    }
+    
+    // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+    
+    function getRandomCoordinate(address, region = '') {
         if (geocodingSystem) {
-            geocodingSystem.clearCache();
+            return geocodingSystem.getApproximateCoordinates(address, region);
         }
-        localStorage.removeItem('geocoding_cache');
-        showNotification('Кэш геокодирования очищен', 'success');
+        
+        const randomLat = 55.7558 + (Math.random() - 0.5) * 2.0;
+        const randomLng = 37.6173 + (Math.random() - 0.5) * 4.0;
+        
+        return {
+            lat: randomLat,
+            lng: randomLng,
+            source: 'random',
+            isExact: false,
+            isMock: true
+        };
     }
-}
-
-function showGeocodingStats() {
-    if (!geocodingSystem) {
-        showNotification('Система геокодирования не инициализирована', 'error');
-        return;
+    
+    // ========== УПРАВЛЕНИЕ ГЕОКОДИРОВАНИЕМ ==========
+    
+    function startManualGeocoding() {
+        if (!geocodingSystem) {
+            showNotification('Система геокодирования не инициализирована', 'warning');
+            return;
+        }
+        
+        const pointsToGeocode = allPoints.filter(p => 
+            p.address && (p.isMock || !p.lat || !p.lng)
+        );
+        
+        if (pointsToGeocode.length === 0) {
+            showNotification('Нет точек для уточнения координат', 'info');
+            return;
+        }
+        
+        showNotification(\`Уточнение координат для \${pointsToGeocode.length} точек...\`, 'info');
+        
+        pointsToGeocode.forEach(point => {
+            geocodingSystem.addToQueue(point);
+        });
+        
+        if (!geocodingSystem.processing) {
+            geocodingSystem.processQueue();
+        }
     }
     
-    const stats = geocodingSystem.stats;
-    const message = `
-        <div style="text-align: left;">
-            <h4>📊 Статистика геокодирования</h4>
-            <p><strong>Всего запросов:</strong> ${stats.total}</p>
-            <p><strong>Из кэша:</strong> ${stats.cached}</p>
-            <p><strong>Яндекс нашел:</strong> ${stats.yandex}</p>
-            <p><strong>OSM нашел:</strong> ${stats.nominatim}</p>
-            <p><strong>Overpass нашел:</strong> ${stats.overpass}</p>
-            <p><strong>Приблизительные:</strong> ${stats.approximate}</p>
-            <p><strong>Не найдено:</strong> ${stats.failed}</p>
-            <p><strong>В очереди:</strong> ${geocodingSystem.queue.length} задач</p>
-            <p><strong>Размер кэша:</strong> ${geocodingSystem.cache.size} записей</p>
-        </div>
-    `;
+    function clearGeocodingCache() {
+        if (confirm('Очистить кэш геокодирования?')) {
+            if (geocodingSystem) {
+                geocodingSystem.clearCache();
+            }
+            localStorage.removeItem('geocoding_cache');
+            showNotification('Кэш геокодирования очищен', 'success');
+        }
+    }
     
-    showModal('Статистика геокодирования', message);
-}
-
-// ========== ИНДИКАТОР ГЕОКОДИРОВАНИЯ ==========
-
-function updateGeocodingIndicator(active, queueSize = 0) {
-    const indicator = document.getElementById('geocoding-indicator');
-    const textElement = document.getElementById('geocoding-indicator-text');
+    function showGeocodingStats() {
+        if (!geocodingSystem) {
+            showNotification('Система геокодирования не инициализирована', 'error');
+            return;
+        }
+        
+        const stats = geocodingSystem.stats;
+        const message = \`
+            <div style="text-align: left;">
+                <h4>📊 Статистика геокодирования</h4>
+                <p><strong>Всего запросов:</strong> \${stats.total}</p>
+                <p><strong>Из кэша:</strong> \${stats.cached}</p>
+                <p><strong>Яндекс нашел:</strong> \${stats.yandex}</p>
+                <p><strong>OSM нашел:</strong> \${stats.nominatim}</p>
+                <p><strong>Overpass нашел:</strong> \${stats.overpass}</p>
+                <p><strong>Приблизительные:</strong> \${stats.approximate}</p>
+                <p><strong>Не найдено:</strong> \${stats.failed}</p>
+                <p><strong>В очереди:</strong> \${geocodingSystem.queue.length} задач</p>
+                <p><strong>Размер кэша:</strong> \${geocodingSystem.cache.size} записей</p>
+            </div>
+        \`;
+        
+        showModal('Статистика геокодирования', message);
+    }
     
-    if (!indicator || !textElement) return;
+    // ========== ИНДИКАТОР ГЕОКОДИРОВАНИЯ ==========
     
-    if (active || queueSize > 0) {
-        indicator.style.display = 'flex';
-        if (active) {
-            textElement.textContent = `Геокодирование... (${queueSize} в очереди)`;
+    function updateGeocodingIndicator(active, queueSize = 0) {
+        const indicator = document.getElementById('geocoding-indicator');
+        const textElement = document.getElementById('geocoding-indicator-text');
+        
+        if (!indicator || !textElement) return;
+        
+        if (active || queueSize > 0) {
+            indicator.style.display = 'flex';
+            if (active) {
+                textElement.textContent = \`Геокодирование... (\${queueSize} в очереди)\`;
+            } else {
+                textElement.textContent = \`В очереди: \${queueSize}\`;
+            }
         } else {
-            textElement.textContent = `В очереди: ${queueSize}`;
+            indicator.style.display = 'none';
         }
-    } else {
-        indicator.style.display = 'none';
     }
-}
-
-// ========== ЭКСПОРТ ФУНКЦИЙ ==========
-
-window.loadData = loadData;
-window.clearFilters = clearFilters;
-window.applyFilters = applyFilters;
-window.searchPoints = searchPoints;
-window.closeModal = closeModal;
-window.startManualGeocoding = startManualGeocoding;
-window.clearGeocodingCache = clearGeocodingCache;
-window.showGeocodingStats = showGeocodingStats;
-window.updateGeocodingIndicator = updateGeocodingIndicator;
-
-// Обновление статуса геокодирования
-setInterval(() => {
-    if (geocodingSystem) {
-        const queueSize = geocodingSystem.queue.length;
-        const isActive = geocodingSystem.processing;
-        updateGeocodingIndicator(isActive, queueSize);
-    }
-}, 1000);
-
+    
+    // ========== ЭКСПОРТ ФУНКЦИЙ ==========
+    
+    window.loadData = loadData;
+    window.clearFilters = clearFilters;
+    window.applyFilters = applyFilters;
+    window.searchPoints = searchPoints;
+    window.closeModal = closeModal;
+    window.startManualGeocoding = startManualGeocoding;
+    window.clearGeocodingCache = clearGeocodingCache;
+    window.showGeocodingStats = showGeocodingStats;
+    window.updateGeocodingIndicator = updateGeocodingIndicator;
+    
+    // Обновление статуса геокодирования
+    setInterval(() => {
+        if (geocodingSystem) {
+            const queueSize = geocodingSystem.queue.length;
+            const isActive = geocodingSystem.processing;
+            updateGeocodingIndicator(isActive, queueSize);
+        }
+    }, 1000);
