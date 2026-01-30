@@ -2287,59 +2287,59 @@ function filterPoints() {
     return filtered;
 }
 
-// ========== ПОИСК ==========
+    // ========== ПОИСК ==========
 
-function searchPoints() {
-    const searchInput = document.getElementById('search');
-    if (!searchInput) return;
-    
-    const query = searchInput.value.trim().toLowerCase();
-    
-    if (!query) {
-        showNotification('Введите текст для поиска', 'info');
-        return;
-    }
-    
-    console.log(`Поиск: "${query}"`);
-    
-    const results = allPoints.filter(point => {
-        return (
-            (point.name && point.name.toLowerCase().includes(query)) ||
-            (point.address && point.address.toLowerCase().includes(query)) ||
-            (point.region && point.region.toLowerCase().includes(query)) ||
-            (point.manager && point.manager.toLowerCase().includes(query))
-        );
-    });
-    
-    console.log(`Найдено результатов: ${results.length}`);
-    
-    if (results.length === 0) {
-        showNotification('Ничего не найдено', 'info');
-        return;
-    }
-    
-    markerCluster.clearLayers();
-    
-    results.forEach(point => {
-        if (point.lat && point.lng) {
-            const marker = createMarker(point);
-            markerCluster.addLayer(marker);
-        }
-    });
-    
-    if (results.length > 0 && results.some(p => p.lat && p.lng)) {
-        const bounds = L.latLngBounds(
-            results
-                .filter(p => p.lat && p.lng)
-                .map(p => [p.lat, p.lng])
-        );
+    function searchPoints() {
+        const searchInput = document.getElementById('search');
+        if (!searchInput) return;
         
-        if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [50, 50] });
+        const query = searchInput.value.trim().toLowerCase();
+        
+        if (!query) {
+            showNotification('Введите текст для поиска', 'info');
+            return;
         }
-    }
-    
-    showNotification(`Найдено ${results.length} точек', 'success`);
+        
+        console.log(`Поиск: "${query}"`);
+        
+        const results = allPoints.filter(point => {
+            return (
+                (point.name && point.name.toLowerCase().includes(query)) ||
+                (point.address && point.address.toLowerCase().includes(query)) ||
+                (point.region && point.region.toLowerCase().includes(query)) ||
+                (point.manager && point.manager.toLowerCase().includes(query))
+            );
+        });
+        
+        console.log(`Найдено результатов: ${results.length}`);
+        
+        if (results.length === 0) {
+            showNotification('Ничего не найдено', 'info');
+            return;
+        }
+        
+        markerCluster.clearLayers();
+        
+        results.forEach(point => {
+            if (point.lat && point.lng) {
+                const marker = createMarker(point);
+                markerCluster.addLayer(marker);
+            }
+        });
+        
+        if (results.length > 0 && results.some(p => p.lat && p.lng)) {
+            const bounds = L.latLngBounds(
+                results
+                    .filter(p => p.lat && p.lng)
+                    .map(p => [p.lat, p.lng])
+            );
+            
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+        
+        showNotification(`Найдено ${results.length} точек`, 'success');
     }
     
     // ========== ИНФОРМАЦИЯ О ТОЧКЕ ==========
@@ -2359,67 +2359,67 @@ function searchPoints() {
             color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
         }
         
-        container.innerHTML = \`
+        container.innerHTML = `
             <div style="margin-bottom: 15px;">
-                <h5 style="color: white; margin-bottom: 5px;">\${point.name || 'Без названия'}</h5>
-                \${point.status ? \`
-                    <span style="background: \${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
-                        \${point.status}
+                <h5 style="color: white; margin-bottom: 5px;">${point.name || 'Без названия'}</h5>
+                ${point.status ? `
+                    <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
+                        ${point.status}
                     </span>
-                \` : ''}
+                ` : ''}
             </div>
             
             <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
-                \${point.address ? \`
+                ${point.address ? `
                     <p style="margin-bottom: 8px;">
                         <strong>📍 Адрес:</strong><br>
-                        <span style="font-size: 14px;">\${point.address.substring(0, 100)}\${point.address.length > 100 ? '...' : ''}</span>
+                        <span style="font-size: 14px;">${point.address.substring(0, 100)}${point.address.length > 100 ? '...' : ''}</span>
                     </p>
-                \` : ''}
+                ` : ''}
                 
-                \${point.lat && point.lng ? \`
+                ${point.lat && point.lng ? `
                     <p style="margin: 0;">
-                        <strong>Координаты:</strong> \${point.lat.toFixed(6)}, \${point.lng.toFixed(6)}
+                        <strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
                     </p>
-                \` : ''}
+                ` : ''}
             </div>
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
-                \${point.region ? \`
+                ${point.region ? `
                     <div>
                         <strong>Регион:</strong><br>
-                        \${point.region}
+                        ${point.region}
                     </div>
-                \` : ''}
+                ` : ''}
                 
-                \${point.manager ? \`
+                ${point.manager ? `
                     <div>
                         <strong>Менеджер:</strong><br>
-                        \${point.manager}
+                        ${point.manager}
                     </div>
-                \` : ''}
+                ` : ''}
                 
-                \${point.contractor ? \`
+                ${point.contractor ? `
                     <div>
                         <strong>Подрядчик:</strong><br>
-                        \${point.contractor}
+                        ${point.contractor}
                     </div>
-                \` : ''}
+                ` : ''}
                 
-                \${point.geocodingSource ? \`
+                ${point.geocodingSource ? `
                     <div>
                         <strong>Источник:</strong><br>
-                        \${point.geocodingSource}
+                        ${point.geocodingSource}
                     </div>
-                \` : ''}
+                ` : ''}
             </div>
             
-            \${point.isMock ? \`
+            ${point.isMock ? `
                 <div style="margin-top: 15px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px;">
                     <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
                 </div>
-            \` : ''}
-        \`;
+            ` : ''}
+        `;
         
         infoSection.style.display = 'block';
     }
@@ -2438,7 +2438,7 @@ function searchPoints() {
         
         if (totalPointsElement) totalPointsElement.textContent = allPoints.length;
         if (shownPointsElement) shownPointsElement.textContent = shownPoints;
-        if (accuracyElement) accuracyElement.textContent = \`\${exactPoints}/\${approximatePoints}\`;
+        if (accuracyElement) accuracyElement.textContent = `${exactPoints}/${approximatePoints}`;
     }
     
     function updateGeocodingStats() {
@@ -2453,28 +2453,28 @@ function searchPoints() {
         
         const stats = geocodingSystem.stats;
         
-        statsElement.innerHTML = \`
+        statsElement.innerHTML = `
             <div style="margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
                 <div style="font-size: 12px; color: #95a5a6; margin-bottom: 5px;">
                     <i class="fas fa-map-marker-alt"></i> Статистика координат:
                 </div>
                 <div style="display: flex; gap: 15px; font-size: 11px;">
                     <div>
-                        <span style="color: #2ecc71;">●</span> Точные: \${exactCoords}
+                        <span style="color: #2ecc71;">●</span> Точные: ${exactCoords}
                     </div>
                     <div>
-                        <span style="color: #f39c12;">●</span> Приблизительные: \${mockCoords}
+                        <span style="color: #f39c12;">●</span> Приблизительные: ${mockCoords}
                     </div>
                     <div>
-                        <span style="color: #e74c3c;">●</span> Без координат: \${totalPoints - exactCoords - mockCoords}
+                        <span style="color: #e74c3c;">●</span> Без координат: ${totalPoints - exactCoords - mockCoords}
                     </div>
                 </div>
                 <div style="margin-top: 8px; font-size: 10px; color: #7f8c8d;">
-                    <div>Кэш: \${stats.cached}</div>
-                    <div>Яндекс: \${stats.yandex} | OSM: \${stats.nominatim}</div>
+                    <div>Кэш: ${stats.cached}</div>
+                    <div>Яндекс: ${stats.yandex} | OSM: ${stats.nominatim}</div>
                 </div>
             </div>
-        \`;
+        `;
     }
     
     function updateLegend() {
@@ -2495,12 +2495,12 @@ function searchPoints() {
         Array.from(statuses).sort().forEach(status => {
             let color = CONFIG.STATUS_COLORS[status] || CONFIG.STATUS_COLORS.default;
             
-            legendHTML += \`
+            legendHTML += `
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                    <div style="width: 15px; height: 15px; border-radius: 50%; background: \${color}; border: 2px solid white;"></div>
-                    <span style="font-size: 12px;">\${status}</span>
+                    <div style="width: 15px; height: 15px; border-radius: 50%; background: ${color}; border: 2px solid white;"></div>
+                    <span style="font-size: 12px;">${status}</span>
                 </div>
-            \`;
+            `;
         });
         
         container.innerHTML = legendHTML;
@@ -2608,7 +2608,7 @@ function searchPoints() {
             return;
         }
         
-        showNotification(\`Уточнение координат для \${pointsToGeocode.length} точек...\`, 'info');
+        showNotification(`Уточнение координат для ${pointsToGeocode.length} точек...`, 'info');
         
         pointsToGeocode.forEach(point => {
             geocodingSystem.addToQueue(point);
@@ -2636,20 +2636,20 @@ function searchPoints() {
         }
         
         const stats = geocodingSystem.stats;
-        const message = \`
+        const message = `
             <div style="text-align: left;">
                 <h4>📊 Статистика геокодирования</h4>
-                <p><strong>Всего запросов:</strong> \${stats.total}</p>
-                <p><strong>Из кэша:</strong> \${stats.cached}</p>
-                <p><strong>Яндекс нашел:</strong> \${stats.yandex}</p>
-                <p><strong>OSM нашел:</strong> \${stats.nominatim}</p>
-                <p><strong>Overpass нашел:</strong> \${stats.overpass}</p>
-                <p><strong>Приблизительные:</strong> \${stats.approximate}</p>
-                <p><strong>Не найдено:</strong> \${stats.failed}</p>
-                <p><strong>В очереди:</strong> \${geocodingSystem.queue.length} задач</p>
-                <p><strong>Размер кэша:</strong> \${geocodingSystem.cache.size} записей</p>
+                <p><strong>Всего запросов:</strong> ${stats.total}</p>
+                <p><strong>Из кэша:</strong> ${stats.cached}</p>
+                <p><strong>Яндекс нашел:</strong> ${stats.yandex}</p>
+                <p><strong>OSM нашел:</strong> ${stats.nominatim}</p>
+                <p><strong>Overpass нашел:</strong> ${stats.overpass}</p>
+                <p><strong>Приблизительные:</strong> ${stats.approximate}</p>
+                <p><strong>Не найдено:</strong> ${stats.failed}</p>
+                <p><strong>В очереди:</strong> ${geocodingSystem.queue.length} задач</p>
+                <p><strong>Размер кэша:</strong> ${geocodingSystem.cache.size} записей</p>
             </div>
-        \`;
+        `;
         
         showModal('Статистика геокодирования', message);
     }
@@ -2665,9 +2665,9 @@ function searchPoints() {
         if (active || queueSize > 0) {
             indicator.style.display = 'flex';
             if (active) {
-                textElement.textContent = \`Геокодирование... (\${queueSize} в очереди)\`;
+                textElement.textContent = `Геокодирование... (${queueSize} в очереди)`;
             } else {
-                textElement.textContent = \`В очереди: \${queueSize}\`;
+                textElement.textContent = `В очереди: ${queueSize}`;
             }
         } else {
             indicator.style.display = 'none';
