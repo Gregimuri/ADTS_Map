@@ -50,66 +50,44 @@ const CONFIG = {
         interval: 300000 // 5 минут
     },
     
-    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Оптимизировано для OSM)
+    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ OSM (Оптимизировано)
     GEOCODING: {
         enabled: true,
         
-        // Задержки между запросами (мс)
+        // Задержки между запросами (мс) - соблюдаем лимиты OSM
         delays: {
-            yandex: 1500,     // 1.5 секунды между запросами к Яндексу
-            nominatim: 2000,  // 2 секунды между запросами к OSM
-            overpass: 3000    // 3 секунды для Overpass
+            nominatim: 1200,  // 1.2 секунды между запросами (1 запрос/сек)
+            overpass: 2000    // 2 секунды для Overpass
         },
         
-        // Максимальное количество одновременных запросов
-        maxConcurrent: 1,
+        // Батчинг для ускорения
+        batchSize: 3,
         
         // Автоматическое геокодирование при загрузке
         autoGeocode: true,
         
         // Кэширование (дней)
-        cacheDays: 60,
+        cacheDays: 90,  // Увеличили срок кэша
         
         // Максимальное количество попыток
-        maxRetries: 3,
+        maxRetries: 2,
         
-        // Показывать приблизительные координаты до уточнения
-        showApproximate: true,
-        
-        // Пользовательский агент для OSM (важно указывать корректный)
-        osmUserAgent: 'TTMapApp/1.0 (https://your-domain.com; contact@email.com)',
-        
-        // Настройки прокси для Яндекса
-        proxy: {
-            urls: [
-                'https://thingproxy.freeboard.io/fetch/',
-                'https://api.corsproxy.io/?',
-                'https://cors-anywhere.herokuapp.com/'
-            ],
-            currentIndex: 0,
-            timeout: 10000 // 10 секунд таймаут
-        },
-        
-        // Альтернативные сервисы геокодирования
-        alternativeServices: {
-            osmOverpass: true,    // Overpass API для поиска населенных пунктов
-            osmNominatim: true,   // Основной OSM сервис
-            yandexBackup: true    // Яндекс как резервный вариант
-        },
+        // Пользовательский агент для OSM (обязательно для соблюдения правил)
+        osmUserAgent: 'TTMapApp/1.0 (trade-points-map; contact@example.com)',
         
         // Настройки оптимизации для OSM
         osmOptimization: {
             normalizeAddresses: true,
-            removeStopWords: true,
-            reorderParts: true,
-            addCountryIfMissing: true,
-            useMultipleQueries: true
+            useMultipleQueries: true,
+            queryLimit: 5,           // Максимум 5 запросов на адрес
+            settlementCache: true,   // Кэш населенных пунктов
+            retryFailed: true        // Повторная попытка для неудачных
         },
         
         // Логирование
         logging: {
-            verbose: true,
-            showQueries: true,
+            verbose: false,          // Уменьшили лог для скорости
+            showQueries: false,
             showResults: true
         }
     }
