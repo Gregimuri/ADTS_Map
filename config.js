@@ -13,7 +13,7 @@ const CONFIG = {
         contractor: ['Подрядчик ФИО', 'Подрядчик']
     },
     
-    // Маппинг статусов для группировки
+    // Маппинг статусов
     STATUS_MAPPING: {
         'сдан': 'Активная',
         'Сдан': 'Активная',
@@ -27,10 +27,7 @@ const CONFIG = {
     // Цвета для статусов
     STATUS_COLORS: {
         'Активная': '#2ecc71',
-        'сдан': '#2ecc71',
-        'Сдан': '#2ecc71',
         'На паузе': '#f39c12',
-        'Отправлен ФО, не принят': '#f39c12',
         'Закрыта': '#e74c3c',
         'План': '#3498db',
         'default': '#95a5a6'
@@ -47,48 +44,32 @@ const CONFIG = {
     // Настройки обновления
     UPDATE: {
         auto: true,
-        interval: 300000 // 5 минут
+        interval: 300000
     },
     
-    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ OSM (Оптимизировано)
+    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ OSM
     GEOCODING: {
         enabled: true,
         
-        // Задержки между запросами (мс) - соблюдаем лимиты OSM
+        // Безопасные задержки для соблюдения лимитов
         delays: {
-            nominatim: 1200,  // 1.2 секунды между запросами (1 запрос/сек)
-            overpass: 2000    // 2 секунды для Overpass
+            nominatim: 1500,  // Безопасная задержка для Nominatim
+            overpass: 2000    // Задержка для Overpass
         },
         
-        // Батчинг для ускорения
-        batchSize: 3,
+        // Консервативные настройки для большого количества точек
+        batchSize: 2,          // Маленькие батчи
+        autoGeocode: false,    // Отключаем авто-геокодирование при загрузке
         
-        // Автоматическое геокодирование при загрузке
-        autoGeocode: true,
+        // Кэширование
+        cacheDays: 180,        // Долгий срок кэша
         
-        // Кэширование (дней)
-        cacheDays: 90,  // Увеличили срок кэша
+        // Пользовательский агент (обязательно)
+        osmUserAgent: 'TTMapApp/1.0 (+https://github.com/your-repo)',
         
-        // Максимальное количество попыток
+        // Стратегия
+        strategy: 'settlement_first', // Сначала населенные пункты, потом адреса
         maxRetries: 2,
-        
-        // Пользовательский агент для OSM (обязательно для соблюдения правил)
-        osmUserAgent: 'TTMapApp/1.0 (trade-points-map; contact@example.com)',
-        
-        // Настройки оптимизации для OSM
-        osmOptimization: {
-            normalizeAddresses: true,
-            useMultipleQueries: true,
-            queryLimit: 5,           // Максимум 5 запросов на адрес
-            settlementCache: true,   // Кэш населенных пунктов
-            retryFailed: true        // Повторная попытка для неудачных
-        },
-        
-        // Логирование
-        logging: {
-            verbose: false,          // Уменьшили лог для скорости
-            showQueries: false,
-            showResults: true
-        }
+        useMultipleEndpoints: true
     }
 };
