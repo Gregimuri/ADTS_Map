@@ -156,13 +156,6 @@ body {
     background: #e67e22;
 }
 
-/* Геокодирование */
-.geocoding-controls {
-    background: rgba(0,0,0,0.1);
-    border-radius: 8px;
-    margin: 0 20px 20px;
-}
-
 /* Фильтры */
 .filters {
     padding: 20px;
@@ -202,17 +195,23 @@ body {
 }
 
 .filter-select[multiple] {
-    height: 100px;
+    height: 120px;
     overflow-y: auto;
 }
 
 .filter-select option {
     padding: 8px;
     background: #34495e;
+    border-bottom: 1px solid #4a6572;
 }
 
 .filter-select option:hover {
     background: #3498db;
+}
+
+.filter-select option:checked {
+    background: #3498db;
+    color: white;
 }
 
 /* Информация о точке */
@@ -295,8 +294,10 @@ body {
     color: #2c3e50;
     border-radius: 10px;
     padding: 15px;
-    width: 200px;
+    width: 250px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .legend h5 {
@@ -304,6 +305,8 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    color: #2c3e50;
+    font-size: 14px;
 }
 
 /* Модальное окно */
@@ -394,6 +397,10 @@ body {
     .sidebar {
         width: 350px;
     }
+    
+    .search-box {
+        width: 400px;
+    }
 }
 
 @media (max-width: 768px) {
@@ -414,13 +421,20 @@ body {
         grid-template-columns: 1fr 1fr;
     }
     
-    .geocoding-controls {
-        margin: 0 10px 15px;
+    .search-box {
+        width: 90%;
+        top: 10px;
     }
     
-    .filters {
-        margin: 0 10px 15px;
-        padding: 15px;
+    .legend {
+        width: 200px;
+        bottom: 10px;
+        left: 10px;
+    }
+    
+    .quick-filters {
+        top: 70px;
+        right: 10px;
     }
 }
 
@@ -433,7 +447,97 @@ body {
         flex-direction: column;
     }
     
-    .geocoding-controls > div {
-        flex-direction: column;
+    .search-box {
+        width: 95%;
     }
+    
+    .legend {
+        width: 180px;
+        padding: 10px;
+    }
+    
+    .filters {
+        margin: 0 10px 15px;
+        padding: 15px;
+    }
+    
+    .point-info {
+        margin: 0 10px 15px;
+        padding: 15px;
+    }
+}
+
+/* Анимация загрузки */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.loading {
+    animation: pulse 1.5s infinite;
+}
+
+/* Улучшенные стили для списков */
+.option-with-color {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.option-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* Стили для быстрых фильтров */
+.quick-filter-btn {
+    width: 100%;
+    margin-bottom: 5px;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.quick-filter-btn:hover {
+    transform: translateX(3px);
+}
+
+/* Стили для поиска в сайдбаре */
+.search-sidebar input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #4a6572;
+    border-radius: 6px;
+    background: #34495e;
+    color: white;
+    font-size: 14px;
+}
+
+.search-sidebar input:focus {
+    outline: none;
+    border-color: #3498db;
+}
+
+.search-sidebar button {
+    padding: 10px 15px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.search-sidebar button:hover {
+    background: #2980b9;
 }
