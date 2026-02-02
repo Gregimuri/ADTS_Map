@@ -19,10 +19,39 @@ let dynamicStatusColors = {
     'default': '#95a5a6'
 };
 
+// Цветовая схема для статусов ADTS
+const ADTS_STATUS_COLORS = {
+    // Основные статусы
+    'Выполнен': '#2ecc71',           // зеленый
+    'Нет оборудования': '#e74c3c',   // красный
+    'В очереди': '#3498db',          // синий
+    'Первичный': '#f1c40f',          // желтый
+    'Финальный': '#9b59b6',          // фиолетовый
+    'Доработка после монтажа': '#95a5a6', // серый
+    
+    // Альтернативные названия
+    'Выполнено': '#2ecc71',
+    'Сдан': '#2ecc71',
+    'Завершен': '#2ecc71',
+    'Оборудования нет': '#e74c3c',
+    'Нет оборудывания': '#e74c3c',
+    'Ожидание оборудования': '#e74c3c',
+    'Очередь': '#3498db',
+    'В работе': '#3498db',
+    'План': '#3498db',
+    'Первичный монтаж': '#f1c40f',
+    'Монтаж начальный': '#f1c40f',
+    'Финальный монтаж': '#9b59b6',
+    'Завершающий монтаж': '#9b59b6',
+    'Доработка': '#95a5a6',
+    'Реконструкция': '#95a5a6',
+    'Переделка': '#95a5a6'
+};
+
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
 
 function initApp() {
-    console.log('Инициализация приложения...');
+    console.log('Инициализация приложения ADTS...');
     initMap();
     showDemoData();
     loadData();
@@ -61,9 +90,19 @@ function initMap() {
                 const statuses = markers.map(m => m.options.status);
                 
                 // Находим цвет для кластера на основе статусов точек
-                for (const status of statuses) {
-                    if (dynamicStatusColors[status]) {
-                        color = dynamicStatusColors[status];
+                // Приоритет: красный > желтый > синий > фиолетовый > зеленый > серый
+                const priorityOrder = [
+                    'Нет оборудования',
+                    'Доработка после монтажа',
+                    'В очереди',
+                    'Первичный',
+                    'Финальный',
+                    'Выполнен'
+                ];
+                
+                for (const priorityStatus of priorityOrder) {
+                    if (statuses.includes(priorityStatus)) {
+                        color = ADTS_STATUS_COLORS[priorityStatus] || dynamicStatusColors.default;
                         break;
                     }
                 }
@@ -158,6 +197,56 @@ function showNotification(message, type = 'info', duration = 5000) {
     }, duration);
 }
 
+// ========== НОРМАЛИЗАЦИЯ СТАТУСОВ ADTS ==========
+
+function normalizeADTSStatus(status) {
+    if (!status) return 'Не указан';
+    
+    const statusLower = status.toLowerCase().trim();
+    
+    // Нормализация для статусов ADTS
+    if (statusLower.includes('выполнен') || statusLower.includes('сдан') || statusLower.includes('завершен')) 
+        return 'Выполнен';
+    if (statusLower.includes('нет оборуд') || statusLower.includes('оборудования нет') || statusLower.includes('ожидание оборуд')) 
+        return 'Нет оборудования';
+    if (statusLower.includes('очеред') || statusLower.includes('в работе') || statusLower.includes('план')) 
+        return 'В очереди';
+    if (statusLower.includes('первичн') || statusLower.includes('начальн') || statusLower.includes('первый')) 
+        return 'Первичный';
+    if (statusLower.includes('финальн') || statusLower.includes('завершающ') || statusLower.includes('окончат')) 
+        return 'Финальный';
+    if (statusLower.includes('доработк') || statusLower.includes('реконструкц') || statusLower.includes('передел')) 
+        return 'Доработка после монтажа';
+    
+    return status;
+}
+
+function getStatusIcon(status) {
+    const normalizedStatus = normalizeADTSStatus(status);
+    
+    switch(normalizedStatus) {
+        case 'Выполнен':
+            return '<i class="fas fa-check-circle"></i>';
+        case 'Нет оборудования':
+            return '<i class="fas fa-times-circle"></i>';
+        case 'В очереди':
+            return '<i class="fas fa-clock"></i>';
+        case 'Первичный':
+            return '<i class="fas fa-hammer"></i>';
+        case 'Финальный':
+            return '<i class="fas fa-check-double"></i>';
+        case 'Доработка после монтажа':
+            return '<i class="fas fa-tools"></i>';
+        default:
+            return '<i class="fas fa-map-marker-alt"></i>';
+    }
+}
+
+function getStatusColor(status) {
+    const normalizedStatus = normalizeADTSStatus(status);
+    return ADTS_STATUS_COLORS[normalizedStatus] || dynamicStatusColors.default;
+}
+
 // ========== ЗАГРУЗКА ДАННЫХ ==========
 
 async function loadData() {
@@ -169,7 +258,7 @@ async function loadData() {
         updateStatus('Загрузка данных...');
         showModal('Загрузка', 'Подключение к Google Таблице...');
         
-        console.log('Начинаю загрузку данных...');
+        console.log('Начинаю загрузку данных ADTS...');
         const data = await loadDataAsCSV();
         
         if (!data || data.length === 0) {
@@ -177,7 +266,6 @@ async function loadData() {
         }
         
         console.log(`Данные загружены: ${data.length} строк, ${data[0]?.length || 0} столбцов`);
-        console.log('Первые 3 строки данных:', data.slice(0, 3));
         
         allPoints = processData(data);
         console.log(`Обработано точек: ${allPoints.length}`);
@@ -187,13 +275,10 @@ async function loadData() {
         
         // Показываем несколько точек для отладки
         if (allPoints.length > 0) {
-            console.log('Примеры обработанных точек:');
+            console.log('Примеры обработанных точек ADTS:');
             allPoints.slice(0, 5).forEach((point, i) => {
-                console.log(`${i+1}. Название: "${point.name}" | Регион: "${point.region}" | Статус: "${point.status}" | Адрес: "${point.address?.substring(0, 50)}..."`);
+                console.log(`${i+1}. Название: "${point.name}" | Регион: "${point.region}" | Статус: "${point.status}" | Нормализованный: "${normalizeADTSStatus(point.status)}"`);
             });
-            
-            console.log('Статусы из данных:', Object.keys(dynamicStatusMapping));
-            console.log('Цвета статусов:', dynamicStatusColors);
         }
         
         allPoints = await addCoordinatesFast(allPoints);
@@ -201,11 +286,12 @@ async function loadData() {
         
         updateFilters();
         updateStatistics();
+        updateStatusStatistics();
         updateLegend();
         showPointsOnMap();
         
         closeModal();
-        updateStatus(`Загружено: ${allPoints.length} точек`);
+        updateStatus(`Загружено: ${allPoints.length} точек ADTS`);
         showNotification('Данные успешно загружены', 'success');
         
     } catch (error) {
@@ -314,22 +400,27 @@ function parseCSV(csvText) {
 // ========== ОБРАБОТКА ДАННЫХ ==========
 
 function determineDynamicSettings(points) {
-    console.log('Определение динамических настроек из данных...');
+    console.log('Определение динамических настроек для ADTS...');
     
     // Собираем все уникальные статусы из данных
     const uniqueStatuses = new Set();
     points.forEach(point => {
         if (point.status && point.status.trim() !== '') {
-            uniqueStatuses.add(point.status.trim());
+            // Нормализуем статус для ADTS
+            const normalizedStatus = normalizeADTSStatus(point.status);
+            uniqueStatuses.add(normalizedStatus);
         }
     });
     
-    console.log('Уникальные статусы из данных:', Array.from(uniqueStatuses));
+    console.log('Уникальные статусы ADTS:', Array.from(uniqueStatuses));
     
-    // Создаем маппинг статусов (пока что 1:1, но можно добавить нормализацию)
+    // Создаем маппинг статусов
     dynamicStatusMapping = {};
-    Array.from(uniqueStatuses).forEach(status => {
-        dynamicStatusMapping[status] = status; // Можно добавить нормализацию здесь
+    points.forEach(point => {
+        if (point.status && point.status.trim() !== '') {
+            const normalizedStatus = normalizeADTSStatus(point.status);
+            dynamicStatusMapping[point.status] = normalizedStatus;
+        }
     });
     
     // Генерируем цвета для статусов
@@ -337,60 +428,43 @@ function determineDynamicSettings(points) {
 }
 
 function generateStatusColors(statuses) {
-    console.log('Генерация цветов для статусов:', statuses);
+    console.log('Генерация цветов для статусов ADTS:', statuses);
     
-    // Предопределенные цвета для частых статусов
-    const predefinedColors = {
-        // Статусы монтажа из вашего примера
-        'В очереди': '#f39c12',     // оранжевый
-        'Первичный': '#3498db',     // синий
-        'Финальный': '#9b59b6',     // фиолетовый
-        'Выполнен': '#2ecc71',      // зеленый
-        'Есть проблемы': '#e74c3c', // красный
-        
-        // Другие возможные статусы
-        'Активная': '#2ecc71',      // зеленый
-        'На паузе': '#f39c12',      // оранжевый
-        'Закрыта': '#e74c3c',       // красный
-        'План': '#3498db',          // синий
-        'Сдан': '#2ecc71',          // зеленый
-        'Отправлен ФО, не принят': '#f39c12' // оранжевый
-    };
+    // Очищаем текущие цвета
+    dynamicStatusColors = { 'default': '#95a5a6' };
     
-    // Цветовая палитра для остальных статусов
-    const colorPalette = [
-        '#1abc9c', '#16a085', // бирюзовые
-        '#27ae60', '#2ecc71', // зеленые
-        '#3498db', '#2980b9', // синие
-        '#9b59b6', '#8e44ad', // фиолетовые
-        '#34495e', '#2c3e50', // темные
-        '#f1c40f', '#f39c12', // желтые/оранжевые
-        '#e67e22', '#d35400', // оранжевые
-        '#e74c3c', '#c0392b', // красные
-        '#ecf0f1', '#bdc3c7'  // светлые
-    ];
-    
-    // Сначала используем предопределенные цвета
-    statuses.forEach((status, index) => {
-        if (predefinedColors[status]) {
-            dynamicStatusColors[status] = predefinedColors[status];
-        }
-    });
-    
-    // Затем генерируем цвета для остальных статусов
-    let colorIndex = 0;
+    // Назначаем цвета из схемы ADTS
     statuses.forEach(status => {
-        if (!dynamicStatusColors[status]) {
-            dynamicStatusColors[status] = colorPalette[colorIndex % colorPalette.length];
-            colorIndex++;
+        // Ищем точное совпадение в схеме ADTS
+        if (ADTS_STATUS_COLORS[status]) {
+            dynamicStatusColors[status] = ADTS_STATUS_COLORS[status];
+            console.log(`✓ Назначен цвет ${ADTS_STATUS_COLORS[status]} для статуса "${status}"`);
+        } else {
+            // Ищем частичное совпадение
+            let colorFound = false;
+            for (const [key, color] of Object.entries(ADTS_STATUS_COLORS)) {
+                if (status.toLowerCase().includes(key.toLowerCase()) || 
+                    key.toLowerCase().includes(status.toLowerCase())) {
+                    dynamicStatusColors[status] = color;
+                    console.log(`≈ Назначен цвет ${color} для статуса "${status}" (похож на "${key}")`);
+                    colorFound = true;
+                    break;
+                }
+            }
+            
+            // Если не нашли, используем цвет по умолчанию
+            if (!colorFound) {
+                dynamicStatusColors[status] = dynamicStatusColors.default;
+                console.log(`✗ Статус "${status}" не распознан, использован цвет по умолчанию`);
+            }
         }
     });
     
-    console.log('Сгенерированные цвета:', dynamicStatusColors);
+    console.log('Финальные цвета статусов ADTS:', dynamicStatusColors);
 }
 
 function processData(rows) {
-    console.log('Начинаю обработку данных...');
+    console.log('Начинаю обработку данных ADTS...');
     
     if (!rows || rows.length < 2) {
         return [];
@@ -399,15 +473,12 @@ function processData(rows) {
     const points = [];
     const headers = rows[0].map(h => h.toString().trim());
     
-    // Выводим заголовки для отладки
     console.log('Заголовки столбцов:', headers);
     console.log('Количество столбцов:', headers.length);
     
-    // Пытаемся найти правильные индексы столбцов
     const colIndices = findColumnIndices(headers);
     console.log('Найденные индексы столбцов:', colIndices);
     
-    // Если у нас мало столбцов или они не распознаны, используем простой подход
     const useSimpleApproach = headers.length < 3 || 
                               Object.values(colIndices).filter(idx => idx !== -1).length < 3;
     
@@ -416,7 +487,6 @@ function processData(rows) {
         return processDataSimple(rows);
     }
     
-    // Используем продвинутый подход с распознаванием столбцов
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         
@@ -433,12 +503,11 @@ function processData(rows) {
             status: '',
             manager: '',
             contractor: '',
-            project: '', // Добавляем поле проекта
+            project: '',
             originalAddress: '',
             originalStatus: ''
         };
         
-        // Заполняем данные по найденным индексам
         Object.keys(colIndices).forEach(key => {
             const index = colIndices[key];
             if (index !== -1 && index < row.length) {
@@ -449,7 +518,6 @@ function processData(rows) {
             }
         });
         
-        // Очищаем данные
         point.name = cleanString(point.name);
         point.region = cleanString(point.region);
         point.address = cleanString(point.address);
@@ -458,67 +526,46 @@ function processData(rows) {
         point.contractor = cleanString(point.contractor);
         point.project = cleanString(point.project);
         
-        // Сохраняем оригинальный адрес
         point.originalAddress = point.address || '';
+        point.originalStatus = point.status || '';
         
-        // Нормализуем статус (используем динамический маппинг)
-        if (point.status && dynamicStatusMapping[point.status]) {
-            point.originalStatus = point.status;
-            point.status = dynamicStatusMapping[point.status];
+        // Нормализуем статус для ADTS
+        if (point.status) {
+            const normalizedStatus = normalizeADTSStatus(point.status);
+            point.status = normalizedStatus;
         }
         
-        // Исправляем возможные ошибки в данных
-        
-        // Если адрес пустой, но есть данные в других полях
         if (!point.address && point.region && point.region.includes(',')) {
-            // Возможно, адрес попал в поле региона
             point.address = point.region;
             point.region = '';
         }
         
-        // Если статус содержит запятые и похож на объединенные данные
-        if (point.status && point.status.includes(',') && point.status.length > 20) {
-            const parts = point.status.split(',');
-            if (parts.length >= 2) {
-                point.status = parts[0].trim();
-                if (!point.manager && parts[1]) {
-                    point.manager = parts[1].trim();
-                }
-                if (!point.contractor && parts[2]) {
-                    point.contractor = parts[2].trim();
-                }
-            }
-        }
-        
-        // Если у точки нет имени, создаем его
         if (!point.name || point.name.trim() === '') {
             if (point.address) {
                 const firstPart = point.address.split(',')[0];
                 point.name = firstPart.trim().substring(0, 30) + (firstPart.length > 30 ? '...' : '');
             } else if (point.region) {
-                point.name = point.region + ' - Точка ' + i;
+                point.name = point.region + ' - Точка ADTS ' + i;
             } else {
-                point.name = 'Точка ' + i;
+                point.name = 'Точка ADTS ' + i;
             }
         }
         
-        // Добавляем точку, если есть минимальные данные
         if (point.name && (point.address || point.region || point.status)) {
             points.push(point);
         }
     }
     
-    console.log(`Обработано точек (продвинутый метод): ${points.length}`);
+    console.log(`Обработано точек ADTS: ${points.length}`);
     return points;
 }
 
 function processDataSimple(rows) {
-    console.log('Использую простой метод обработки данных...');
+    console.log('Использую простой метод обработки данных ADTS...');
     
     const points = [];
     const headers = rows[0] || [];
     
-    // Определяем вероятный порядок столбцов на основе заголовков
     let nameIndex = 0;
     let regionIndex = -1;
     let addressIndex = -1;
@@ -534,7 +581,6 @@ function processDataSimple(rows) {
         else if (h.includes('проект')) projectIndex = index;
     });
     
-    // Если не нашли явные заголовки, предполагаем порядок
     if (regionIndex === -1 && headers.length > 1) regionIndex = 1;
     if (addressIndex === -1 && headers.length > 2) addressIndex = 2;
     if (statusIndex === -1 && headers.length > 3) statusIndex = 3;
@@ -560,56 +606,38 @@ function processDataSimple(rows) {
             isMock: true
         };
         
-        // Заполняем данные по индексам
         if (row.length > nameIndex) point.name = cleanString(row[nameIndex]);
         if (regionIndex !== -1 && row.length > regionIndex) point.region = cleanString(row[regionIndex]);
         if (addressIndex !== -1 && row.length > addressIndex) point.address = cleanString(row[addressIndex]);
         if (statusIndex !== -1 && row.length > statusIndex) point.status = cleanString(row[statusIndex]);
         if (projectIndex !== -1 && row.length > projectIndex) point.project = cleanString(row[projectIndex]);
         
-        // Остальные поля (менеджер, подрядчик) - в следующих столбцах
         if (row.length > 5) point.manager = cleanString(row[5]);
         if (row.length > 6) point.contractor = cleanString(row[6]);
         
-        // Нормализуем статус (используем динамический маппинг)
-        if (point.status && dynamicStatusMapping[point.status]) {
+        // Нормализуем статус для ADTS
+        if (point.status) {
             point.originalStatus = point.status;
-            point.status = dynamicStatusMapping[point.status];
+            point.status = normalizeADTSStatus(point.status);
         }
         
-        // Если адрес содержит несколько частей через ",," - разбираем
-        if (point.address && point.address.includes(',,')) {
-            const parts = point.address.split(',,');
-            point.address = parts[0] || '';
-            if (!point.status && parts[1]) {
-                point.status = parts[1];
-                if (dynamicStatusMapping[point.status]) {
-                    point.status = dynamicStatusMapping[point.status];
-                }
-            }
-            if (!point.manager && parts[2]) point.manager = parts[2];
-            if (!point.contractor && parts[3]) point.contractor = parts[3];
-        }
-        
-        // Если нет имени, создаем
         if (!point.name || point.name.trim() === '') {
             if (point.address) {
                 const firstPart = point.address.split(',')[0];
                 point.name = firstPart.trim().substring(0, 30) + (firstPart.length > 30 ? '...' : '');
             } else if (point.region) {
-                point.name = point.region + ' - Точка ' + i;
+                point.name = point.region + ' - Точка ADTS ' + i;
             } else {
-                point.name = 'Точка ' + i;
+                point.name = 'Точка ADTS ' + i;
             }
         }
         
-        // Добавляем точку
         if (point.name) {
             points.push(point);
         }
     }
     
-    console.log(`Обработано точек (простой метод): ${points.length}`);
+    console.log(`Обработано точек ADTS (простой метод): ${points.length}`);
     return points;
 }
 
@@ -637,7 +665,6 @@ function findColumnIndices(headers) {
     
     const headersLower = headers.map(h => h.toString().toLowerCase().trim());
     
-    // Поиск по ключевым словам
     headersLower.forEach((header, index) => {
         if (header.includes('название') || header.includes('имя') || header.includes('точка') || header.includes('тт')) {
             if (indices.name === -1) indices.name = index;
@@ -662,7 +689,6 @@ function findColumnIndices(headers) {
         }
     });
     
-    // Если некоторые столбцы не найдены, используем порядок по умолчанию
     let nextIndex = 0;
     Object.keys(indices).forEach(key => {
         if (indices[key] === -1) {
@@ -682,11 +708,10 @@ function findColumnIndices(headers) {
 // ========== БЫСТРОЕ ДОБАВЛЕНИЕ КООРДИНАТ ==========
 
 async function addCoordinatesFast(points) {
-    console.log('⚡ Быстрое добавление координат...');
+    console.log('⚡ Быстрое добавление координат для ADTS...');
     
     return points.map(point => {
         if (!point.lat || !point.lng) {
-            // Используем регион из точки для генерации координат
             const coords = getRandomCoordinate(point.address || '', point.region || '');
             return { 
                 ...point, 
@@ -703,13 +728,13 @@ async function addCoordinatesFast(points) {
 // ========== ОТОБРАЖЕНИЕ ТОЧЕК ==========
 
 function showPointsOnMap() {
-    console.log('Показываю точки на карте...');
+    console.log('Показываю точки ADTS на карте...');
     
     markerCluster.clearLayers();
     markersMap.clear();
     
     const filteredPoints = filterPoints();
-    console.log(`Фильтровано точек: ${filteredPoints.length}`);
+    console.log(`Фильтровано точек ADTS: ${filteredPoints.length}`);
     
     filteredPoints.forEach(point => {
         if (point.lat && point.lng) {
@@ -732,53 +757,75 @@ function showPointsOnMap() {
     }
     
     updateStatistics();
+    updateStatusStatistics();
 }
 
 function createMarker(point) {
-    let color = dynamicStatusColors.default;
-    const status = point.status || '';
+    const normalizedStatus = normalizeADTSStatus(point.status);
+    const color = getStatusColor(point.status);
+    const statusIcon = getStatusIcon(point.status);
     
-    // Используем динамические цвета
-    if (status && dynamicStatusColors[status]) {
-        color = dynamicStatusColors[status];
+    // Определяем класс маркера на основе статуса
+    let markerClass = '';
+    switch(normalizedStatus) {
+        case 'Выполнен':
+            markerClass = 'marker-completed';
+            break;
+        case 'Нет оборудования':
+            markerClass = 'marker-no-equipment';
+            break;
+        case 'В очереди':
+            markerClass = 'marker-queue';
+            break;
+        case 'Первичный':
+            markerClass = 'marker-primary';
+            break;
+        case 'Финальный':
+            markerClass = 'marker-final';
+            break;
+        case 'Доработка после монтажа':
+            markerClass = 'marker-rework';
+            break;
     }
     
     let accuracyIcon = '';
     if (point.isMock) {
-        accuracyIcon = '<div style="position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; background: #f39c12; border-radius: 50%; border: 2px solid white;"></div>';
+        accuracyIcon = '<div style="position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: #f39c12; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>';
     }
     
     const icon = L.divIcon({
         html: `
             <div style="position: relative;">
-                <div style="
+                <div class="custom-marker ${markerClass}" style="
                     background: ${color};
-                    width: 30px;
-                    height: 30px;
+                    width: 34px;
+                    height: 34px;
                     border-radius: 50%;
                     border: 3px solid white;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+                    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    color: white;
+                    color: ${['#f1c40f'].includes(color) ? '#2c3e50' : 'white'};
                     font-weight: bold;
-                    font-size: 12px;
+                    font-size: 14px;
+                    transition: all 0.3s;
+                    cursor: pointer;
                 ">
-                    ${point.name ? point.name.charAt(0).toUpperCase() : 'Т'}
+                    ${statusIcon}
                 </div>
                 ${accuracyIcon}
             </div>
         `,
-        className: 'custom-marker',
-        iconSize: [30, 30],
-        iconAnchor: [15, 30]
+        className: 'adts-marker',
+        iconSize: [34, 34],
+        iconAnchor: [17, 34]
     });
     
     const marker = L.marker([point.lat, point.lng], {
         icon: icon,
-        title: point.name,
-        status: point.status,
+        title: `${point.name} - ${normalizedStatus}`,
+        status: normalizedStatus,
         pointId: point.id,
         isMock: point.isMock || false
     });
@@ -786,16 +833,61 @@ function createMarker(point) {
     marker.bindPopup(createPopupContent(point));
     marker.on('click', function() {
         showPointDetails(point);
+        // Подсвечиваем маркер при клике
+        this.setIcon(createHighlightedMarker(point));
+        setTimeout(() => {
+            this.setIcon(icon);
+        }, 2000);
+    });
+    
+    marker.on('mouseover', function() {
+        this.openPopup();
+    });
+    
+    marker.on('mouseout', function() {
+        this.closePopup();
     });
     
     return marker;
 }
 
+function createHighlightedMarker(point) {
+    const color = getStatusColor(point.status);
+    const statusIcon = getStatusIcon(point.status);
+    
+    return L.divIcon({
+        html: `
+            <div style="position: relative;">
+                <div style="
+                    background: ${color};
+                    width: 42px;
+                    height: 42px;
+                    border-radius: 50%;
+                    border: 4px solid white;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: ${['#f1c40f'].includes(color) ? '#2c3e50' : 'white'};
+                    font-weight: bold;
+                    font-size: 16px;
+                    animation: pulse 1s infinite;
+                ">
+                    ${statusIcon}
+                </div>
+                <div style="position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; background: #f39c12; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+            </div>
+        `,
+        className: 'adts-marker-highlighted',
+        iconSize: [42, 42],
+        iconAnchor: [21, 42]
+    });
+}
+
 function createPopupContent(point) {
-    let color = dynamicStatusColors.default;
-    if (point.status && dynamicStatusColors[point.status]) {
-        color = dynamicStatusColors[point.status];
-    }
+    const normalizedStatus = normalizeADTSStatus(point.status);
+    const color = getStatusColor(point.status);
+    const statusIcon = getStatusIcon(point.status);
     
     let displayAddress = point.address || '';
     if (displayAddress) {
@@ -807,63 +899,78 @@ function createPopupContent(point) {
     let accuracyInfo = '';
     if (point.isMock) {
         accuracyInfo = `
-            <div style="margin-top: 10px; padding: 5px; background: #f39c12; color: white; border-radius: 3px; font-size: 11px;">
-                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
+            <div style="margin-top: 10px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 8px;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Приблизительные координаты</span>
             </div>
         `;
     }
     
+    const statusInfo = normalizedStatus === 'Не указан' ? 
+        `<span style="color: #95a5a6;">Не указан</span>` :
+        `<span style="color: ${color}; font-weight: 600; background: ${color}20; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 5px;">
+            ${statusIcon} ${normalizedStatus}
+        </span>`;
+    
     return `
-        <div style="min-width: 250px; max-width: 300px;">
-            <h4 style="margin: 0 0 10px 0; color: #2c3e50; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
-                ${point.name || 'Без названия'}
+        <div style="min-width: 280px; max-width: 350px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+            <h4 style="margin: 0 0 12px 0; color: #2c3e50; border-bottom: 3px solid ${color}; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
+                <span>${point.name || 'Без названия'}</span>
+                <span style="font-size: 12px; color: #7f8c8d;">ADTS</span>
             </h4>
             
-            <div style="margin-bottom: 10px;">
-                <strong>Статус:</strong> 
-                <span style="color: ${color}; font-weight: 500;">${point.status || 'Не указан'}</span>
+            <div style="margin-bottom: 15px;">
+                <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 5px;">Статус:</div>
+                <div style="font-size: 14px;">${statusInfo}</div>
             </div>
             
             ${displayAddress ? `
-                <div style="margin-bottom: 10px;">
-                    <strong>📍 Адрес:</strong><br>
-                    <span style="font-size: 14px;">${displayAddress}</span>
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 5px;">
+                        <i class="fas fa-map-marker-alt"></i> Адрес:
+                    </div>
+                    <div style="font-size: 14px; line-height: 1.4;">${displayAddress}</div>
                 </div>
             ` : ''}
             
             ${point.region ? `
-                <div style="margin-bottom: 10px;">
-                    <strong>Регион:</strong><br>
-                    <span style="font-size: 14px;">${point.region}</span>
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 5px;">
+                        <i class="fas fa-globe"></i> Регион:
+                    </div>
+                    <div style="font-size: 14px;">${point.region}</div>
                 </div>
             ` : ''}
             
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 15px;">
                 ${point.project ? `
                     <div>
-                        <strong>Проект:</strong><br>
-                        ${point.project}
+                        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 3px;">Проект:</div>
+                        <div style="font-size: 13px; font-weight: 500;">${point.project}</div>
                     </div>
                 ` : ''}
                 
                 ${point.manager ? `
                     <div>
-                        <strong>Менеджер:</strong><br>
-                        ${point.manager}
+                        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 3px;">Менеджер:</div>
+                        <div style="font-size: 13px;">${point.manager}</div>
                     </div>
                 ` : ''}
                 
                 ${point.contractor ? `
                     <div>
-                        <strong>Подрядчик:</strong><br>
-                        ${point.contractor}
+                        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 3px;">Подрядчик:</div>
+                        <div style="font-size: 13px;">${point.contractor}</div>
                     </div>
                 ` : ''}
             </div>
             
             ${point.lat && point.lng ? `
-                <div style="margin-top: 10px; font-size: 11px; color: #7f8c8d;">
-                    <strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
+                <div style="margin-top: 15px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 11px; color: #6c757d;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span><i class="fas fa-crosshairs"></i> Координаты:</span>
+                        <span>${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}</span>
+                    </div>
                 </div>
             ` : ''}
             
@@ -875,7 +982,7 @@ function createPopupContent(point) {
 // ========== ФИЛЬТРАЦИЯ ==========
 
 function updateFilters() {
-    console.log('Обновляю фильтры...');
+    console.log('Обновляю фильтры ADTS...');
     
     const filters = {
         projects: new Set(),
@@ -887,7 +994,11 @@ function updateFilters() {
     allPoints.forEach(point => {
         if (point.project && point.project.trim() !== '') filters.projects.add(point.project);
         if (point.region && point.region.trim() !== '') filters.regions.add(point.region);
-        if (point.status && point.status.trim() !== '') filters.statuses.add(point.status);
+        
+        // Используем нормализованный статус для фильтров
+        const normalizedStatus = normalizeADTSStatus(point.status);
+        if (normalizedStatus && normalizedStatus.trim() !== '') filters.statuses.add(normalizedStatus);
+        
         if (point.manager && point.manager.trim() !== '') filters.managers.add(point.manager);
     });
     
@@ -897,7 +1008,7 @@ function updateFilters() {
     fillFilter('filter-status', Array.from(filters.statuses).sort());
     fillFilter('filter-manager', Array.from(filters.managers).sort());
     
-    console.log('Доступные фильтры:');
+    console.log('Доступные фильтры ADTS:');
     console.log('- Проекты:', Array.from(filters.projects));
     console.log('- Регионы:', Array.from(filters.regions));
     console.log('- Статусы:', Array.from(filters.statuses));
@@ -917,11 +1028,17 @@ function fillFilter(selectId, options) {
             opt.value = option;
             opt.textContent = option;
             
-            // Сохраняем цвет статуса в data-атрибуте
-            if (selectId === 'filter-status' && dynamicStatusColors[option]) {
-                opt.dataset.color = dynamicStatusColors[option];
-                opt.style.color = dynamicStatusColors[option];
-                opt.style.fontWeight = 'bold';
+            // Для фильтра статусов добавляем цвет
+            if (selectId === 'filter-status') {
+                const color = getStatusColor(option);
+                opt.dataset.color = color;
+                opt.style.color = color;
+                opt.style.fontWeight = '600';
+                
+                // Добавляем иконку статуса
+                const icon = getStatusIcon(option);
+                opt.textContent = ` ${option}`;
+                opt.innerHTML = `${icon} ${option}`;
             }
             
             if (selected.includes(option)) {
@@ -934,7 +1051,7 @@ function fillFilter(selectId, options) {
 }
 
 function applyFilters() {
-    console.log('Применяю фильтры...');
+    console.log('Применяю фильтры ADTS...');
     
     activeFilters.projects = getSelectedValues('filter-project');
     activeFilters.regions = getSelectedValues('filter-region');
@@ -948,7 +1065,7 @@ function applyFilters() {
 }
 
 function clearFilters() {
-    console.log('Сбрасываю фильтры...');
+    console.log('Сбрасываю фильтры ADTS...');
     
     ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
         const select = document.getElementById(id);
@@ -980,7 +1097,7 @@ function filterPoints() {
         const filters = [
             { key: 'project', value: point.project, active: activeFilters.projects },
             { key: 'region', value: point.region, active: activeFilters.regions },
-            { key: 'status', value: point.status, active: activeFilters.statuses },
+            { key: 'status', value: normalizeADTSStatus(point.status), active: activeFilters.statuses },
             { key: 'manager', value: point.manager, active: activeFilters.managers }
         ];
         
@@ -1011,19 +1128,21 @@ function searchPoints() {
         return;
     }
     
-    console.log(`Поиск: "${query}"`);
+    console.log(`Поиск ADTS: "${query}"`);
     
     const results = allPoints.filter(point => {
+        const normalizedStatus = normalizeADTSStatus(point.status).toLowerCase();
         return (
             (point.name && point.name.toLowerCase().includes(query)) ||
             (point.address && point.address.toLowerCase().includes(query)) ||
             (point.region && point.region.toLowerCase().includes(query)) ||
             (point.manager && point.manager.toLowerCase().includes(query)) ||
-            (point.project && point.project.toLowerCase().includes(query))
+            (point.project && point.project.toLowerCase().includes(query)) ||
+            normalizedStatus.includes(query)
         );
     });
     
-    console.log(`Найдено результатов: ${results.length}`);
+    console.log(`Найдено результатов ADTS: ${results.length}`);
     
     if (results.length === 0) {
         showNotification('Ничего не найдено', 'info');
@@ -1051,7 +1170,7 @@ function searchPoints() {
         }
     }
     
-    showNotification(`Найдено ${results.length} точек`, 'success');
+    showNotification(`Найдено ${results.length} точек ADTS`, 'success');
 }
 
 // ========== ИНФОРМАЦИЯ О ТОЧКЕ ==========
@@ -1062,74 +1181,95 @@ function showPointDetails(point) {
     
     if (!container || !infoSection) return;
     
-    let color = dynamicStatusColors.default;
-    if (point.status && dynamicStatusColors[point.status]) {
-        color = dynamicStatusColors[point.status];
-    }
+    const normalizedStatus = normalizeADTSStatus(point.status);
+    const color = getStatusColor(point.status);
+    const statusIcon = getStatusIcon(point.status);
     
     container.innerHTML = `
-        <div style="margin-bottom: 15px;">
-            <h5 style="color: white; margin-bottom: 5px;">${point.name || 'Без названия'}</h5>
-            ${point.status ? `
-                <span style="background: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
-                    ${point.status}
-                </span>
-            ` : ''}
+        <div style="margin-bottom: 20px;">
+            <h5 style="color: white; margin-bottom: 10px; font-size: 18px;">${point.name || 'Без названия'}</h5>
+            <div class="point-details-status" style="background: ${color}; color: ${['#f1c40f'].includes(color) ? '#2c3e50' : 'white'};">
+                ${statusIcon} ${normalizedStatus}
+            </div>
         </div>
         
-        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+        <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             ${point.address ? `
-                <p style="margin-bottom: 8px;">
-                    <strong>📍 Адрес:</strong><br>
-                    <span style="font-size: 14px;">${point.address.substring(0, 100)}${point.address.length > 100 ? '...' : ''}</span>
+                <p style="margin-bottom: 12px;">
+                    <strong style="color: #3498db; display: block; margin-bottom: 5px;">
+                        <i class="fas fa-map-marker-alt"></i> Адрес:
+                    </strong>
+                    <span style="font-size: 14px; line-height: 1.4;">${point.address}</span>
                 </p>
             ` : ''}
             
             ${point.region ? `
-                <p style="margin-bottom: 8px;">
-                    <strong>Регион:</strong><br>
+                <p style="margin-bottom: 12px;">
+                    <strong style="color: #3498db; display: block; margin-bottom: 5px;">
+                        <i class="fas fa-globe"></i> Регион:
+                    </strong>
                     <span style="font-size: 14px;">${point.region}</span>
                 </p>
             ` : ''}
             
             ${point.project ? `
-                <p style="margin-bottom: 8px;">
-                    <strong>Проект:</strong><br>
+                <p style="margin-bottom: 12px;">
+                    <strong style="color: #3498db; display: block; margin-bottom: 5px;">
+                        <i class="fas fa-project-diagram"></i> Проект:
+                    </strong>
                     <span style="font-size: 14px;">${point.project}</span>
                 </p>
             ` : ''}
             
             ${point.lat && point.lng ? `
                 <p style="margin: 0;">
-                    <strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
+                    <strong style="color: #3498db; display: block; margin-bottom: 5px;">
+                        <i class="fas fa-crosshairs"></i> Координаты:
+                    </strong>
+                    <span style="font-size: 14px; font-family: monospace;">${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}</span>
                 </p>
             ` : ''}
         </div>
         
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 14px;">
             ${point.manager ? `
                 <div>
-                    <strong>Менеджер:</strong><br>
-                    ${point.manager}
+                    <strong style="color: #3498db; display: block; margin-bottom: 5px;">
+                        <i class="fas fa-user-tie"></i> Менеджер:
+                    </strong>
+                    <span>${point.manager}</span>
                 </div>
             ` : ''}
             
             ${point.contractor ? `
                 <div>
-                    <strong>Подрядчик:</strong><br>
-                    ${point.contractor}
+                    <strong style="color: #3498db; display: block; margin-bottom: 5px;">
+                        <i class="fas fa-hard-hat"></i> Подрядчик:
+                    </strong>
+                    <span>${point.contractor}</span>
                 </div>
             ` : ''}
         </div>
         
         ${point.isMock ? `
-            <div style="margin-top: 15px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px;">
-                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
+            <div style="margin-top: 20px; padding: 12px; background: #f39c12; color: white; border-radius: 8px; font-size: 13px; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 16px;"></i>
+                <div>
+                    <strong>Приблизительные координаты</strong>
+                    <div style="font-size: 12px; opacity: 0.9; margin-top: 3px;">Точное местоположение неизвестно</div>
+                </div>
             </div>
         ` : ''}
+        
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: #95a5a6;">
+            <div>ID: ${point.id}</div>
+            <div>Строка в таблице: ${point.sheetRow}</div>
+            ${point.originalStatus ? `<div>Исходный статус: ${point.originalStatus}</div>` : ''}
+        </div>
     `;
     
     infoSection.style.display = 'block';
+    infoSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ========== СТАТИСТИКА ==========
@@ -1149,68 +1289,172 @@ function updateStatistics() {
     if (accuracyElement) accuracyElement.textContent = `${exactPoints}/${approximatePoints}`;
 }
 
+function updateStatusStatistics() {
+    const filteredPoints = filterPoints();
+    
+    const statusCounts = {
+        'Выполнен': 0,
+        'Нет оборудования': 0,
+        'В очереди': 0,
+        'Первичный': 0,
+        'Финальный': 0,
+        'Доработка после монтажа': 0,
+        'Не указан': 0
+    };
+    
+    filteredPoints.forEach(point => {
+        const normalizedStatus = normalizeADTSStatus(point.status);
+        if (statusCounts.hasOwnProperty(normalizedStatus)) {
+            statusCounts[normalizedStatus]++;
+        } else {
+            statusCounts['Не указан']++;
+        }
+    });
+    
+    // Обновляем счетчики в легенде
+    Object.keys(statusCounts).forEach(status => {
+        if (status !== 'Не указан') {
+            const elementId = `count-${status.toLowerCase().replace(/\s+/g, '-').replace(/после-монтажа/, '')}`;
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = statusCounts[status];
+                // Динамически изменяем размер индикатора в зависимости от количества
+                const count = statusCounts[status];
+                const maxCount = Math.max(...Object.values(statusCounts));
+                const size = 12 + (count / maxCount) * 8; // от 12px до 20px
+                const indicator = element.parentElement?.querySelector('.status-indicator');
+                if (indicator) {
+                    indicator.style.width = `${size}px`;
+                    indicator.style.height = `${size}px`;
+                }
+            }
+        }
+    });
+    
+    // Обновляем круговую диаграмму в статистике (если есть)
+    updateStatusChart(statusCounts);
+}
+
+function updateStatusChart(statusCounts) {
+    const chartElement = document.getElementById('status-chart');
+    if (!chartElement) return;
+    
+    const total = Object.values(statusCounts).reduce((a, b) => a + b, 0);
+    if (total === 0) return;
+    
+    let percentages = {};
+    Object.keys(statusCounts).forEach(status => {
+        percentages[status] = (statusCounts[status] / total) * 100;
+    });
+    
+    // Создаем conic-gradient для круговой диаграммы
+    let gradientParts = [];
+    let accumulated = 0;
+    
+    const statusOrder = ['Выполнен', 'Финальный', 'Первичный', 'В очереди', 'Нет оборудования', 'Доработка после монтажа', 'Не указан'];
+    
+    statusOrder.forEach((status, index) => {
+        if (percentages[status] > 0) {
+            const color = getStatusColor(status);
+            const start = accumulated;
+            const end = accumulated + percentages[status];
+            gradientParts.push(`${color} ${start}% ${end}%`);
+            accumulated = end;
+        }
+    });
+    
+    chartElement.style.background = `conic-gradient(${gradientParts.join(', ')})`;
+    chartElement.title = `Статусы ADTS: ${Object.entries(statusCounts).map(([s, c]) => `${s}: ${c}`).join(', ')}`;
+}
+
 function updateLegend() {
     const container = document.getElementById('legend');
     if (!container) return;
     
-    let legendHTML = '<h5><i class="fas fa-key"></i> Легенда статусов</h5>';
-    const statuses = new Set();
+    let legendHTML = '<h5 style="color: #2c3e50; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;"><i class="fas fa-palette"></i> Статусы ADTS</h5>';
     
-    // Собираем все статусы из отфильтрованных точек
+    const statuses = [
+        { name: 'Выполнен', color: '#2ecc71', icon: 'check-circle' },
+        { name: 'Нет оборудования', color: '#e74c3c', icon: 'times-circle' },
+        { name: 'В очереди', color: '#3498db', icon: 'clock' },
+        { name: 'Первичный', color: '#f1c40f', icon: 'hammer' },
+        { name: 'Финальный', color: '#9b59b6', icon: 'check-double' },
+        { name: 'Доработка после монтажа', color: '#95a5a6', icon: 'tools' }
+    ];
+    
+    // Получаем количество точек по каждому статусу
+    const statusCounts = {};
     const filteredPoints = filterPoints();
-    filteredPoints.forEach(point => {
-        if (point.status) statuses.add(point.status);
+    
+    statuses.forEach(status => {
+        statusCounts[status.name] = filteredPoints.filter(p => 
+            normalizeADTSStatus(p.status) === status.name
+        ).length;
     });
     
-    // Если в отфильтрованных точках мало статусов, показываем все
-    if (statuses.size < 3) {
-        allPoints.forEach(point => {
-            if (point.status) statuses.add(point.status);
-        });
-    }
-    
-    // Сортируем статусы для красивого отображения
-    const sortedStatuses = Array.from(statuses).sort((a, b) => {
-        // Приоритетные статусы показываем первыми
-        const priorityOrder = ['Выполнен', 'Финальный', 'Первичный', 'В очереди', 'Есть проблемы'];
-        const indexA = priorityOrder.indexOf(a);
-        const indexB = priorityOrder.indexOf(b);
-        
-        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-        
-        return a.localeCompare(b);
-    });
-    
-    sortedStatuses.forEach(status => {
-        let color = dynamicStatusColors[status] || dynamicStatusColors.default;
-        
-        // Подсчитываем количество точек с этим статусом
-        const count = allPoints.filter(p => p.status === status).length;
-        const filteredCount = filteredPoints.filter(p => p.status === status).length;
+    statuses.forEach(status => {
+        const count = statusCounts[status.name] || 0;
+        const filteredCount = filteredPoints.filter(p => 
+            normalizeADTSStatus(p.status) === status.name
+        ).length;
         
         legendHTML += `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 5px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+            <div class="legend-item" style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 10px;
+                padding: 8px 10px;
+                background: ${status.color}15;
+                border-radius: 6px;
+                border-left: 4px solid ${status.color};
+                transition: all 0.3s;
+                cursor: pointer;
+            " onclick="filterByStatus('${status.name}')" title="Нажмите для фильтрации">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 15px; height: 15px; border-radius: 50%; background: ${color}; border: 2px solid white;"></div>
-                    <span style="font-size: 12px; color: white;">${status}</span>
+                    <div style="
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 50%;
+                        background: ${status.color};
+                        border: 2px solid white;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        color: ${status.color === '#f1c40f' ? '#2c3e50' : 'white'};
+                        font-size: 8px;
+                    ">
+                        <i class="fas fa-${status.icon}"></i>
+                    </div>
+                    <span style="font-size: 13px; color: #2c3e50; font-weight: 500;">${status.name}</span>
                 </div>
-                <div style="font-size: 11px; color: #95a5a6;">
-                    ${filteredCount}/${count}
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 12px; color: #7f8c8d;">${filteredCount}</span>
+                    <span style="font-size: 11px; color: #bdc3c7; background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 10px;">
+                        ${count}
+                    </span>
                 </div>
             </div>
         `;
     });
     
-    // Если нет статусов, показываем сообщение
-    if (sortedStatuses.length === 0) {
-        legendHTML += `
-            <div style="text-align: center; padding: 10px; color: #95a5a6; font-size: 12px;">
-                <i class="fas fa-info-circle"></i> Нет данных о статусах
+    // Добавляем общую статистику
+    const totalFiltered = filteredPoints.length;
+    const totalAll = allPoints.length;
+    
+    legendHTML += `
+        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px; color: #7f8c8d;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span>Показано:</span>
+                <span style="font-weight: 600; color: #2c3e50;">${totalFiltered}</span>
             </div>
-        `;
-    }
+            <div style="display: flex; justify-content: space-between;">
+                <span>Всего точек:</span>
+                <span style="font-weight: 600; color: #2c3e50;">${totalAll}</span>
+            </div>
+        </div>
+    `;
     
     container.innerHTML = legendHTML;
 }
@@ -1227,72 +1471,111 @@ function setupAutoUpdate() {
 // ========== ДЕМО-ДАННЫЕ ==========
 
 function showDemoData() {
-    console.log('Показываем демо-данные...');
+    console.log('Показываем демо-данные ADTS...');
     
     allPoints = [
         {
-            id: 'demo_1',
-            name: 'Магнит №123',
+            id: 'demo_adts_1',
+            name: 'Магазин ADTS №101',
             region: 'Москва',
-            address: 'ул. Тверская, д. 1',
-            status: 'В очереди',
+            address: 'ул. Тверская, д. 15',
+            status: 'Выполнено',
             manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
-            project: 'Проект А',
+            contractor: 'ООО "МонтажСервис"',
+            project: 'ADTS Москва 2024',
             lat: 55.7570,
             lng: 37.6145,
             isMock: false
         },
         {
-            id: 'demo_2',
-            name: 'Магнит №124',
-            region: 'Московская обл.',
+            id: 'demo_adts_2',
+            name: 'Супермаркет ADTS №202',
+            region: 'Московская область',
             address: 'г. Химки, ул. Ленина, 25',
-            status: 'Первичный',
+            status: 'Нет оборудования',
             manager: 'Петров П.П.',
-            contractor: 'Сидоров С.С.',
-            project: 'Проект Б',
+            contractor: 'ИП Сидоров',
+            project: 'ADTS Подмосковье',
             lat: 55.8890,
             lng: 37.4450,
             isMock: false
         },
         {
-            id: 'demo_3',
-            name: 'Басенджи',
+            id: 'demo_adts_3',
+            name: 'Гипермаркет ADTS №303',
             region: 'Алтайский край',
             address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
-            status: 'Финальный',
+            status: 'В очереди на монтаж',
             manager: 'Казак Светлана',
             contractor: 'Дмитриев Александр',
-            project: 'Проект В',
-            lat: 53.3481 + (Math.random() - 0.5) * 0.5,
-            lng: 83.7794 + (Math.random() - 0.5) * 1.0,
+            project: 'ADTS Сибирь',
+            lat: 53.3481,
+            lng: 83.7794,
             isMock: true
         },
         {
-            id: 'demo_4',
-            name: 'Супермаркет №5',
+            id: 'demo_adts_4',
+            name: 'Торговый центр ADTS',
             region: 'Краснодарский край',
             address: 'г. Краснодар, ул. Красная, 100',
-            status: 'Выполнен',
+            status: 'Первичный монтаж',
             manager: 'Смирнова Ольга',
             contractor: 'Кузнецов Михаил',
-            project: 'Проект Г',
-            lat: 45.0355 + (Math.random() - 0.5) * 0.2,
-            lng: 38.9753 + (Math.random() - 0.5) * 0.2,
+            project: 'ADTS Юг',
+            lat: 45.0355,
+            lng: 38.9753,
             isMock: true
         },
         {
-            id: 'demo_5',
-            name: 'Гипермаркет №7',
-            region: 'Свердловская обл.',
+            id: 'demo_adts_5',
+            name: 'Молл ADTS Premium',
+            region: 'Свердловская область',
             address: 'г. Екатеринбург, пр-кт Ленина, 50',
-            status: 'Есть проблемы',
+            status: 'Финальный этап',
             manager: 'Васильев А.А.',
             contractor: 'Николаев Н.Н.',
-            project: 'Проект Д',
-            lat: 56.8389 + (Math.random() - 0.5) * 0.2,
-            lng: 60.6057 + (Math.random() - 0.5) * 0.2,
+            project: 'ADTS Урал',
+            lat: 56.8389,
+            lng: 60.6057,
+            isMock: true
+        },
+        {
+            id: 'demo_adts_6',
+            name: 'Универмаг ADTS №606',
+            region: 'Новосибирская область',
+            address: 'г. Новосибирск, ул. Советская, 35',
+            status: 'Доработка после монтажа',
+            manager: 'Козлова Е.В.',
+            contractor: 'ООО "ТехноМонтаж"',
+            project: 'ADTS Сибирь',
+            lat: 55.0084,
+            lng: 82.9357,
+            isMock: true
+        },
+        {
+            id: 'demo_adts_7',
+            name: 'Дискаунтер ADTS',
+            region: 'Ростовская область',
+            address: 'г. Ростов-на-Дону, ул. Большая Садовая, 10',
+            status: 'Ожидание оборудования',
+            manager: 'Алексеев С.С.',
+            contractor: 'Петров П.П.',
+            project: 'ADTS Юг',
+            lat: 47.2224,
+            lng: 39.7189,
+            isMock: true
+        },
+        {
+            id: 'demo_adts_8',
+            name: 'Супермаркет у дома ADTS',
+            region: 'Татарстан',
+            address: 'г. Казань, ул. Баумана, 45',
+            status: 'План',
+            manager: 'Галиева А.Р.',
+            contractor: 'ИП Хусаинов',
+            project: 'ADTS Поволжье',
+            lat: 55.7961,
+            lng: 49.1064,
             isMock: true
         }
     ];
@@ -1302,324 +1585,48 @@ function showDemoData() {
     
     updateFilters();
     updateStatistics();
+    updateStatusStatistics();
     updateLegend();
     showPointsOnMap();
     
-    updateStatus('Демо-данные загружены');
-    showNotification('Используются демо-данные', 'warning');
+    updateStatus('Демо-данные ADTS загружены');
+    showNotification('Используются демо-данные ADTS', 'warning');
 }
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 function getRandomCoordinate(address, region = '') {
-    // Базовая карта координат центров регионов
+    // Упрощенная версия для демо
     const regionCenters = {
-        // Москва и область
         'Москва': { lat: 55.7558, lng: 37.6173 },
         'Московская': { lat: 55.7558, lng: 37.6173 },
-        'Московская обл.': { lat: 55.7558, lng: 37.6173 },
-        'Московская область': { lat: 55.7558, lng: 37.6173 },
-        
-        // Санкт-Петербург и область
-        'Санкт-Петербург': { lat: 59.9343, lng: 30.3351 },
-        'Ленинградская': { lat: 59.9343, lng: 30.3351 },
-        'Ленинградская обл.': { lat: 59.9343, lng: 30.3351 },
-        
-        // Края
         'Алтайский': { lat: 52.5186, lng: 85.1019 },
-        'Алтайский край': { lat: 52.5186, lng: 85.1019 },
-        
         'Краснодарский': { lat: 45.0355, lng: 38.9753 },
-        'Краснодарский край': { lat: 45.0355, lng: 38.9753 },
-        'Краснодар': { lat: 45.0355, lng: 38.9753 },
-        
-        'Красноярский': { lat: 56.0184, lng: 92.8672 },
-        'Красноярский край': { lat: 56.0184, lng: 92.8672 },
-        
-        'Ставропольский': { lat: 45.0433, lng: 41.9691 },
-        'Ставропольский край': { lat: 45.0433, lng: 41.9691 },
-        
-        'Пермский': { lat: 58.0105, lng: 56.2502 },
-        'Пермский край': { lat: 58.0105, lng: 56.2502 },
-        
-        // Области
-        'Архангельская': { lat: 64.5393, lng: 40.5187 },
-        'Архангельская обл.': { lat: 64.5393, lng: 40.5187 },
-        
-        'Астраханская': { lat: 46.3479, lng: 48.0336 },
-        'Астраханская обл.': { lat: 46.3479, lng: 48.0336 },
-        
-        'Белгородская': { lat: 50.5952, lng: 36.5872 },
-        'Белгородская обл.': { lat: 50.5952, lng: 36.5872 },
-        
-        'Брянская': { lat: 53.2434, lng: 34.3642 },
-        'Брянская обл.': { lat: 53.2434, lng: 34.3642 },
-        
-        'Владимирская': { lat: 56.1290, lng: 40.4070 },
-        'Владимирская обл.': { lat: 56.1290, lng: 40.4070 },
-        
-        'Волгоградская': { lat: 48.7080, lng: 44.5133 },
-        'Волгоградская обл.': { lat: 48.7080, lng: 44.5133 },
-        'Волгоградская об.': { lat: 48.7080, lng: 44.5133 },
-        
-        'Вологодская': { lat: 59.2181, lng: 39.8886 },
-        'Вологодская обл.': { lat: 59.2181, lng: 39.8886 },
-        
-        'Воронежская': { lat: 51.6755, lng: 39.2089 },
-        'Воронежская обл.': { lat: 51.6755, lng: 39.2089 },
-        
-        'Ивановская': { lat: 57.0004, lng: 40.9739 },
-        'Ивановская обл.': { lat: 57.0004, lng: 40.9739 },
-        
-        'Иркутская': { lat: 52.2896, lng: 104.2806 },
-        'Иркутская обл.': { lat: 52.2896, lng: 104.2806 },
-        
-        'Калужская': { lat: 54.5138, lng: 36.2612 },
-        'Калужская обл.': { lat: 54.5138, lng: 36.2612 },
-        
-        'Кемеровская': { lat: 55.3547, lng: 86.0873 },
-        'Кемеровская обл.': { lat: 55.3547, lng: 86.0873 },
-        
-        'Кировская': { lat: 58.6035, lng: 49.6680 },
-        'Кировская обл.': { lat: 58.6035, lng: 49.6680 },
-        'Кировская обл': { lat: 58.6035, lng: 49.6680 },
-        
-        'Костромская': { lat: 58.5500, lng: 43.6833 },
-        'Костромская обл.': { lat: 58.5500, lng: 43.6833 },
-        
-        'Курганская': { lat: 55.4410, lng: 65.3411 },
-        'Курганская обл.': { lat: 55.4410, lng: 65.3411 },
-        
-        'Курская': { lat: 51.7370, lng: 36.1874 },
-        'Курская обл.': { lat: 51.7370, lng: 36.1874 },
-        
-        'Липецкая': { lat: 52.6088, lng: 39.5992 },
-        'Липецкая обл.': { lat: 52.6088, lng: 39.5992 },
-        
-        'Мурманская': { lat: 68.9585, lng: 33.0827 },
-        'Мурманская облас.': { lat: 68.9585, lng: 33.0827 },
-        
-        'Нижегородская': { lat: 56.3269, lng: 44.0065 },
-        'Нижегородская обл.': { lat: 56.3269, lng: 44.0065 },
-        
-        'Новгородская': { lat: 58.5228, lng: 31.2698 },
-        'Новгородская обл.': { lat: 58.5228, lng: 31.2698 },
-        
-        'Новосибирская': { lat: 55.0084, lng: 82.9357 },
-        'Новосибирская обл.': { lat: 55.0084, lng: 82.9357 },
-        'Новосибирск': { lat: 55.0084, lng: 82.9357 },
-        
-        'Омская': { lat: 54.9914, lng: 73.3715 },
-        'Омская обл.': { lat: 54.9914, lng: 73.3715 },
-        
-        'Оренбургская': { lat: 51.7682, lng: 55.0974 },
-        'Оренбургская обл.': { lat: 51.7682, lng: 55.0974 },
-        
-        'Орловская': { lat: 52.9671, lng: 36.0696 },
-        'Орловская обл.': { lat: 52.9671, lng: 36.0696 },
-        
-        'Пензенская': { lat: 53.2007, lng: 45.0046 },
-        'Пензенская обл.': { lat: 53.2007, lng: 45.0046 },
-        
-        'Псковская': { lat: 57.8194, lng: 28.3318 },
-        'Псковская обл.': { lat: 57.8194, lng: 28.3318 },
-        
-        'Ростовская': { lat: 47.2224, lng: 39.7189 },
-        'Ростовская обл.': { lat: 47.2224, lng: 39.7189 },
-        
-        'Рязанская': { lat: 54.6269, lng: 39.6916 },
-        'Рязанская обл.': { lat: 54.6269, lng: 39.6916 },
-        
-        'Самарская': { lat: 53.1959, lng: 50.1002 },
-        'Самарская обл.': { lat: 53.1959, lng: 50.1002 },
-        
         'Свердловская': { lat: 56.8389, lng: 60.6057 },
-        'Свердловская обл.': { lat: 56.8389, lng: 60.6057 },
-        
-        'Смоленская': { lat: 54.7826, lng: 32.0453 },
-        'Смоленская обл.': { lat: 54.7826, lng: 32.0453 },
-        
-        'Тамбовская': { lat: 52.7212, lng: 41.4523 },
-        'Тамбовская обл.': { lat: 52.7212, lng: 41.4523 },
-        'Тамбовская область': { lat: 52.7212, lng: 41.4523 },
-        
-        'Тверская': { lat: 56.8587, lng: 35.9176 },
-        'Тверская обл.': { lat: 56.8587, lng: 35.9176 },
-        'Тверская обл': { lat: 56.8587, lng: 35.9176 },
-        
-        'Томская': { lat: 56.4846, lng: 84.9476 },
-        'Томская обл.': { lat: 56.4846, lng: 84.9476 },
-        
-        'Тульская': { lat: 54.1920, lng: 37.6173 },
-        'Тульская обл.': { lat: 54.1920, lng: 37.6173 },
-        
-        'Тюменская': { lat: 57.1530, lng: 65.5343 },
-        'Тюменская обл.': { lat: 57.1530, lng: 65.5343 },
-        
-        'Ульяновская': { lat: 54.3142, lng: 48.4031 },
-        'Ульяновская обл.': { lat: 54.3142, lng: 48.4031 },
-        
-        'Челябинская': { lat: 55.1644, lng: 61.4368 },
-        'Челябинская обл.': { lat: 55.1644, lng: 61.4368 },
-        
-        'Ярославская': { lat: 57.6261, lng: 39.8845 },
-        'Ярославская обл.': { lat: 57.6261, lng: 39.8845 },
-        
-        // Республики
+        'Новосибирская': { lat: 55.0084, lng: 82.9357 },
+        'Ростовская': { lat: 47.2224, lng: 39.7189 },
         'Татарстан': { lat: 55.7961, lng: 49.1064 },
-        'Респ. Татарстан': { lat: 55.7961, lng: 49.1064 },
-        
-        'Башкортостан': { lat: 54.7351, lng: 55.9587 },
-        'Респ. Башкортостан': { lat: 54.7351, lng: 55.9587 },
-        
-        'Удмуртская': { lat: 57.0670, lng: 53.0270 },
-        'Удмуртская респ.': { lat: 57.0670, lng: 53.0270 },
-        
-        'Чувашская': { lat: 56.1439, lng: 47.2489 },
-        'Чувашская респ.': { lat: 56.1439, lng: 47.2489 },
-        
-        'Марий Эл': { lat: 56.6380, lng: 47.8951 },
-        'Респ. Марий Эл': { lat: 56.6380, lng: 47.8951 },
-        
-        'Мордовия': { lat: 54.1874, lng: 45.1839 },
-        'Респ. Мордовия': { lat: 54.1874, lng: 45.1839 },
-        
-        'Адыгея': { lat: 44.6098, lng: 40.1006 },
-        'Респ. Адыгея': { lat: 44.6098, lng: 40.1006 },
-        
-        'Дагестан': { lat: 42.9849, lng: 47.5047 },
-        'Респ. Дагестан': { lat: 42.9849, lng: 47.5047 },
-        
-        'Кабардино-Балкар': { lat: 43.4847, lng: 43.6071 },
-        'Кабардино-Балкарская': { lat: 43.4847, lng: 43.6071 },
-        'Кабардино-Балкар.': { lat: 43.4847, lng: 43.6071 },
-        
-        'Калмыкия': { lat: 46.3079, lng: 44.2700 },
-        'Калмыкия респ.': { lat: 46.3079, lng: 44.2700 },
-        'Республика Калмыкия': { lat: 46.3079, lng: 44.2700 },
-        
-        'Карачаево-Черкесская': { lat: 43.9159, lng: 41.7740 },
-        'Карачаево-Черкесская Республика': { lat: 43.9159, lng: 41.7740 },
-        
-        'Карелия': { lat: 61.7850, lng: 34.3468 },
-        
-        'Коми': { lat: 61.6688, lng: 50.8354 },
-        'Коми респ.': { lat: 61.6688, lng: 50.8354 },
-        
-        'Северная Осетия': { lat: 43.0241, lng: 44.6814 },
-        
-        'Хакасия': { lat: 53.7224, lng: 91.4435 },
-        'Хакассия': { lat: 53.7224, lng: 91.4435 },
-        
-        // Автономные округа
-        'ХМАО': { lat: 61.0032, lng: 69.0189 },
-        
-        'ЯНАО': { lat: 66.5299, lng: 66.6136 },
-        
-        // Города
-        'Сочи': { lat: 43.5855, lng: 39.7231 },
-        
-        // По умолчанию - центр России
         'default': { lat: 55.7558, lng: 37.6173 }
-    };
-    
-    // Радиусы для разных типов регионов (в градусах)
-    const regionRadii = {
-        'город': 0.05,        // Москва, СПб, города
-        'край': 0.5,          // Края
-        'область': 0.3,       // Области
-        'республика': 0.4,    // Республики
-        'ао': 1.0,            // Автономные округа
-        'default': 0.3        // По умолчанию
     };
     
     let baseLat = 55.7558;
     let baseLng = 37.6173;
     let radius = 0.3;
     
-    // Получаем регион из параметра
-    const regionStr = (region || '').toString().trim();
-    
-    if (!regionStr) {
-        console.log('⚠️ Регион не указан, использую центр России');
-        radius = regionRadii.default;
-    } else {
-        let found = false;
+    if (region) {
+        const regionStr = region.toString().trim().toLowerCase();
         
-        // Нормализуем регион для поиска
-        const normalizedRegion = regionStr.toLowerCase();
-        
-        // Ищем точное совпадение
         for (const [key, coords] of Object.entries(regionCenters)) {
-            if (normalizedRegion === key.toLowerCase()) {
+            if (regionStr.includes(key.toLowerCase()) || key.toLowerCase().includes(regionStr)) {
                 baseLat = coords.lat;
                 baseLng = coords.lng;
-                console.log(`✅ Найдено точное совпадение: ${key}`);
-                found = true;
                 break;
             }
         }
-        
-        // Если не нашли точного совпадения, ищем частичное
-        if (!found) {
-            for (const [key, coords] of Object.entries(regionCenters)) {
-                const keyLower = key.toLowerCase();
-                
-                // Проверяем содержит ли регион ключевые слова
-                if (normalizedRegion.includes(keyLower) || keyLower.includes(normalizedRegion)) {
-                    baseLat = coords.lat;
-                    baseLng = coords.lng;
-                    console.log(`✅ Найдено частичное совпадение: ${key}`);
-                    found = true;
-                    break;
-                }
-                
-                // Проверяем первые слова
-                const regionFirstWord = normalizedRegion.split(' ')[0];
-                const keyFirstWord = keyLower.split(' ')[0];
-                
-                if (regionFirstWord === keyFirstWord && regionFirstWord.length > 3) {
-                    baseLat = coords.lat;
-                    baseLng = coords.lng;
-                    console.log(`✅ Найдено по первому слову: ${key}`);
-                    found = true;
-                    break;
-                }
-            }
-        }
-        
-        // Определяем радиус на основе типа региона
-        if (normalizedRegion.includes('москва') || 
-            normalizedRegion.includes('санкт-петербург') ||
-            normalizedRegion.includes('сочи') ||
-            normalizedRegion.includes('новосибирск')) {
-            radius = regionRadii.город;
-        } else if (normalizedRegion.includes('край')) {
-            radius = regionRadii.край;
-        } else if (normalizedRegion.includes('обл') || 
-                  normalizedRegion.includes('область')) {
-            radius = regionRadii.область;
-        } else if (normalizedRegion.includes('респ') || 
-                  normalizedRegion.includes('республика')) {
-            radius = regionRadii.республика;
-        } else if (normalizedRegion.includes('хмао') || 
-                  normalizedRegion.includes('янао') ||
-                  normalizedRegion.includes('ао')) {
-            radius = regionRadii.ао;
-        } else {
-            radius = regionRadii.default;
-        }
-        
-        if (!found) {
-            console.log(`⚠️ Регион "${regionStr}" не найден, использую центр России`);
-        }
     }
     
-    // Добавляем случайное смещение в пределах региона
     const randomLat = baseLat + (Math.random() - 0.5) * radius * 2;
     const randomLng = baseLng + (Math.random() - 0.5) * radius * 3;
-    
-    console.log(`📍 Координаты: ${randomLat.toFixed(6)}, ${randomLng.toFixed(6)} (радиус: ${radius})`);
     
     return {
         lat: randomLat,
@@ -1627,7 +1634,7 @@ function getRandomCoordinate(address, region = '') {
         source: 'approximate',
         isExact: false,
         isMock: true,
-        region: regionStr
+        region: region
     };
 }
 
@@ -1638,3 +1645,51 @@ window.clearFilters = clearFilters;
 window.applyFilters = applyFilters;
 window.searchPoints = searchPoints;
 window.closeModal = closeModal;
+
+// Функция для быстрого фильтра по статусу
+window.filterByStatus = function(status) {
+    const statusSelect = document.getElementById('filter-status');
+    if (!statusSelect) return;
+    
+    // Сбрасываем все выборы
+    Array.from(statusSelect.options).forEach(option => {
+        option.selected = false;
+    });
+    
+    // Выбираем указанный статус
+    Array.from(statusSelect.options).forEach(option => {
+        if (option.value === status) {
+            option.selected = true;
+        }
+    });
+    
+    applyFilters();
+    showNotification(`Применен фильтр: ${status}`, 'success');
+};
+
+// Инициализация дополнительных обработчиков
+setTimeout(() => {
+    // Добавляем стили для анимации пульсации
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .custom-marker:hover {
+            animation: pulse 0.5s infinite;
+            transform: scale(1.1);
+            z-index: 1000 !important;
+        }
+        
+        .legend-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        }
+    `;
+    document.head.appendChild(style);
+    
+    console.log('ADTS Карта успешно инициализирована');
+}, 1000);
