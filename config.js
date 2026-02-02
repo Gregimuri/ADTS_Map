@@ -48,40 +48,5 @@ const CONFIG = {
     UPDATE: {
         auto: true,
         interval: 300000 // 5 минут
-    },
-    
-    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Упрощенная версия - только OSM)
-    GEOCODING: {
-        enabled: true,
-        
-        // Задержки между запросами (мс)
-        delays: {
-            nominatim: 1500   // 1.5 секунды между запросами к OSM
-        },
-        
-        // Максимальное количество одновременных запросов
-        maxConcurrent: 1,
-        
-        // Автоматическое геокодирование при загрузке
-        autoGeocode: true,
-        
-        // Кэширование (дней)
-        cacheDays: 30,
-        
-        // Максимальное количество попыток
-        maxRetries: 2,
-        
-        // Пользовательский агент для OSM
-        osmUserAgent: 'TTMapApp/1.0',
-        
-        // Альтернативные сервисы геокодирования
-        alternativeServices: {
-            osmOverpass: true    // Overpass API для поиска населенных пунктов
-        },
-        
-        // Логирование
-        logging: {
-            verbose: true
-        }
     }
 };
