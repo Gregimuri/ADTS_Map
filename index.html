@@ -70,6 +70,17 @@
             50% { opacity: 0.5; transform: scale(1.2); }
             100% { opacity: 1; transform: scale(1); }
         }
+        
+        /* Улучшенная нормализация адресов */
+        .address-example {
+            font-size: 12px;
+            color: #95a5a6;
+            margin-top: 5px;
+            padding: 5px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -130,9 +141,12 @@
             <!-- Геокодирование -->
             <div class="geocoding-controls" style="padding: 0 20px 15px;">
                 <h4 style="color: white; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
-                    <i class="fas fa-search-location"></i> Геокодирование
+                    <i class="fas fa-search-location"></i> Геокодирование OSM
                 </h4>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <div class="address-example">
+                    Формат: Город, Улица, Дом
+                </div>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;">
                     <button class="btn btn-primary" onclick="startManualGeocoding()" style="padding: 8px 12px; font-size: 13px;">
                         <i class="fas fa-bolt"></i> Уточнить координаты
                     </button>
@@ -144,16 +158,6 @@
                     </button>
                 </div>
                 <div id="geocoding-stats" style="margin-top: 10px;"></div>
-            </div>
-            
-            <!-- Статус геокодирования -->
-            <div class="geocoding-status" style="padding: 10px 20px; background: rgba(0,0,0,0.1); margin: 0 20px 20px; border-radius: 8px;">
-                <div id="geocoding-status">
-                    <i class="fas fa-map-marker-alt"></i> Геокодирование: <span>Инициализация...</span>
-                </div>
-                <div id="geocoding-details" style="font-size: 11px; color: #95a5a6; margin-top: 5px;">
-                    Кэш: 0 | Яндекс: 0 | OSM: 0
-                </div>
             </div>
             
             <!-- Фильтры -->
