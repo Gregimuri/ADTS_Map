@@ -27,6 +27,47 @@
             from { transform: translateX(0); opacity: 1; }
             to { transform: translateX(100%); opacity: 0; }
         }
+        
+        /* Стили для выпадающих списков с цветами статусов */
+        .status-option {
+            padding-left: 5px;
+        }
+        
+        .status-color-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        /* Стили для улучшенной легенды */
+        .legend-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 5px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+        }
+        
+        .legend-color {
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            border: 2px solid white;
+            margin-right: 10px;
+        }
+        
+        .legend-count {
+            font-size: 11px;
+            color: #95a5a6;
+            background: rgba(0,0,0,0.2);
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
     </style>
 </head>
 <body>
@@ -84,6 +125,16 @@
                 </button>
             </div>
             
+            <!-- Поиск -->
+            <div class="search-sidebar" style="padding: 0 20px 15px;">
+                <div style="display: flex; gap: 5px;">
+                    <input type="text" id="search-sidebar" placeholder="Поиск по названию..." style="flex: 1; padding: 10px; border: 1px solid #4a6572; border-radius: 6px; background: #34495e; color: white;">
+                    <button onclick="searchPointsSidebar()" style="padding: 10px 15px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+            
             <!-- Фильтры -->
             <div class="filters">
                 <h3><i class="fas fa-filter"></i> Фильтры</h3>
@@ -103,7 +154,7 @@
                 </div>
                 
                 <div class="filter-group">
-                    <label>Статус:</label>
+                    <label>Статус монтажа:</label>
                     <select id="filter-status" multiple class="filter-select">
                         <option value="">Все статусы</option>
                     </select>
@@ -116,14 +167,24 @@
                     </select>
                 </div>
                 
-                <button class="btn btn-primary" onclick="applyFilters()" style="margin-top: 15px;">
-                    <i class="fas fa-check"></i> Применить фильтры
-                </button>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button class="btn btn-primary" onclick="applyFilters()" style="flex: 1;">
+                        <i class="fas fa-check"></i> Применить
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearFilters()" style="flex: 1;">
+                        <i class="fas fa-times"></i> Сбросить
+                    </button>
+                </div>
             </div>
             
             <!-- Информация о точке -->
             <div class="point-info" id="point-info" style="display: none;">
-                <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
+                    <button onclick="document.getElementById('point-info').style.display='none'" style="background: none; border: none; color: #95a5a6; cursor: pointer; font-size: 16px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
                 <div id="point-details"></div>
             </div>
             
@@ -151,16 +212,36 @@
         <div class="map-container">
             <div id="map"></div>
             
-            <!-- Поиск -->
+            <!-- Поиск на карте -->
             <div class="search-box">
-                <input type="text" id="search" placeholder="Поиск по названию или адресу...">
+                <input type="text" id="search" placeholder="Поиск по названию, адресу, региону...">
                 <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
             </div>
             
-            <!-- Легенда -->
+            <!-- Легенда статусов -->
             <div class="legend">
-                <h5><i class="fas fa-key"></i> Легенда статусов</h5>
                 <div id="legend"></div>
+            </div>
+            
+            <!-- Быстрые фильтры -->
+            <div class="quick-filters" style="position: absolute; top: 80px; right: 20px; z-index: 1000; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); max-width: 200px;">
+                <h6 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">
+                    <i class="fas fa-bolt"></i> Быстрые фильтры
+                </h6>
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <button onclick="filterByStatus('Выполнен')" style="background: #2ecc71; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                        <i class="fas fa-check-circle"></i> Выполненные
+                    </button>
+                    <button onclick="filterByStatus('Есть проблемы')" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                        <i class="fas fa-exclamation-triangle"></i> С проблемами
+                    </button>
+                    <button onclick="filterByStatus('В очереди')" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                        <i class="fas fa-clock"></i> В очереди
+                    </button>
+                    <button onclick="clearFilters()" style="background: #95a5a6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                        <i class="fas fa-times"></i> Сбросить все
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -183,5 +264,65 @@
     
     <!-- Приложение -->
     <script src="app.js"></script>
+    
+    <!-- Дополнительные функции -->
+    <script>
+        // Функция для быстрого фильтра по статусу
+        function filterByStatus(status) {
+            const statusSelect = document.getElementById('filter-status');
+            // Очищаем все выборы
+            Array.from(statusSelect.options).forEach(option => {
+                option.selected = false;
+            });
+            // Выбираем нужный статус
+            Array.from(statusSelect.options).forEach(option => {
+                if (option.value === status) {
+                    option.selected = true;
+                }
+            });
+            applyFilters();
+            showNotification(`Фильтр по статусу: ${status}`, 'success');
+        }
+        
+        // Функция поиска из сайдбара
+        function searchPointsSidebar() {
+            const searchInput = document.getElementById('search-sidebar');
+            const searchMapInput = document.getElementById('search');
+            
+            // Копируем значение в поле поиска на карте
+            if (searchMapInput) {
+                searchMapInput.value = searchInput.value;
+            }
+            
+            searchPoints();
+        }
+        
+        // Автозапуск поиска при нажатии Enter в сайдбаре
+        document.getElementById('search-sidebar').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchPointsSidebar();
+            }
+        });
+        
+        // Автозапуск поиска при нажатии Enter на карте
+        document.getElementById('search').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchPoints();
+            }
+        });
+        
+        // Обновляем легенду при изменении фильтров
+        document.getElementById('filter-status').addEventListener('change', updateLegendFromApp);
+        document.getElementById('filter-region').addEventListener('change', updateLegendFromApp);
+        document.getElementById('filter-project').addEventListener('change', updateLegendFromApp);
+        document.getElementById('filter-manager').addEventListener('change', updateLegendFromApp);
+        
+        function updateLegendFromApp() {
+            // Вызываем функцию updateLegend из app.js
+            if (typeof updateLegend === 'function') {
+                updateLegend();
+            }
+        }
+    </script>
 </body>
 </html>
