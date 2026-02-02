@@ -370,26 +370,76 @@ body {
     transform: scale(1.1);
 }
 
-/* Кластеры */
-.marker-cluster-small {
-    background-color: rgba(181, 226, 140, 0.6);
-}
-.marker-cluster-small div {
-    background-color: rgba(110, 204, 57, 0.6);
+/* Кластеры - обновленные стили для цветовой дифференциации */
+.marker-cluster {
+    background-clip: padding-box;
+    border-radius: 20px;
 }
 
-.marker-cluster-medium {
-    background-color: rgba(241, 211, 87, 0.6);
-}
-.marker-cluster-medium div {
-    background-color: rgba(240, 194, 12, 0.6);
+.marker-cluster div {
+    width: 30px;
+    height: 30px;
+    margin-left: 5px;
+    margin-top: 5px;
+    text-align: center;
+    border-radius: 15px;
+    font: 12px "Helvetica Neue", Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.marker-cluster-large {
-    background-color: rgba(253, 156, 115, 0.6);
+/* Цвета кластеров по статусам ADTS */
+.marker-cluster-status-completed {
+    background-color: rgba(46, 204, 113, 0.8) !important;
 }
-.marker-cluster-large div {
-    background-color: rgba(241, 128, 23, 0.6);
+.marker-cluster-status-completed div {
+    background-color: rgba(39, 174, 96, 0.9) !important;
+}
+
+.marker-cluster-status-no-equipment {
+    background-color: rgba(231, 76, 60, 0.8) !important;
+}
+.marker-cluster-status-no-equipment div {
+    background-color: rgba(192, 57, 43, 0.9) !important;
+}
+
+.marker-cluster-status-queue {
+    background-color: rgba(52, 152, 219, 0.8) !important;
+}
+.marker-cluster-status-queue div {
+    background-color: rgba(41, 128, 185, 0.9) !important;
+}
+
+.marker-cluster-status-primary {
+    background-color: rgba(241, 196, 15, 0.8) !important;
+}
+.marker-cluster-status-primary div {
+    background-color: rgba(243, 156, 18, 0.9) !important;
+    color: #2c3e50;
+}
+
+.marker-cluster-status-final {
+    background-color: rgba(155, 89, 182, 0.8) !important;
+}
+.marker-cluster-status-final div {
+    background-color: rgba(142, 68, 173, 0.9) !important;
+}
+
+.marker-cluster-status-rework {
+    background-color: rgba(149, 165, 166, 0.8) !important;
+}
+.marker-cluster-status-rework div {
+    background-color: rgba(127, 140, 141, 0.9) !important;
+}
+
+.marker-cluster-status-mixed {
+    background-color: rgba(52, 73, 94, 0.8) !important;
+}
+.marker-cluster-status-mixed div {
+    background-color: rgba(44, 62, 80, 0.9) !important;
 }
 
 /* Адаптивность */
@@ -430,11 +480,6 @@ body {
         width: 200px;
         bottom: 10px;
         left: 10px;
-    }
-    
-    .quick-filters {
-        top: 70px;
-        right: 10px;
     }
 }
 
@@ -492,26 +537,6 @@ body {
     display: inline-block;
 }
 
-/* Стили для быстрых фильтров */
-.quick-filter-btn {
-    width: 100%;
-    margin-bottom: 5px;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.quick-filter-btn:hover {
-    transform: translateX(3px);
-}
-
 /* Стили для поиска в сайдбаре */
 .search-sidebar input {
     width: 100%;
@@ -542,15 +567,7 @@ body {
     background: #2980b9;
 }
 
-/* Стили для статусов ADTS */
-.status-completed { background-color: #2ecc71; color: white; }
-.status-no-equipment { background-color: #e74c3c; color: white; }
-.status-queue { background-color: #3498db; color: white; }
-.status-primary { background-color: #f1c40f; color: #2c3e50; }
-.status-final { background-color: #9b59b6; color: white; }
-.status-rework { background-color: #95a5a6; color: white; }
-
-/* Специальные маркеры для разных статусов */
+/* Стили для маркеров ADTS */
 .marker-completed {
     background: #2ecc71 !important;
     border-color: #27ae60 !important;
@@ -593,43 +610,6 @@ body {
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-/* Панель быстрых фильтров по статусам */
-.quick-status-filters {
-    position: absolute;
-    top: 100px;
-    right: 20px;
-    z-index: 1000;
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    max-width: 250px;
-}
-
-.quick-status-filter {
-    width: 100%;
-    margin-bottom: 8px;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.quick-status-filter:hover {
-    transform: translateX(5px);
-    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
-}
-
-.quick-status-filter i {
-    font-size: 14px;
-}
-
 /* Улучшенная панель информации о точке */
 .point-details-status {
     display: inline-block;
@@ -640,18 +620,54 @@ body {
     margin-bottom: 10px;
 }
 
-/* Круговые диаграммы для статистики */
-.stat-chart {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
+/* Анимации для маркеров */
+@keyframes markerPulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0,0,0,0.3); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(0,0,0,0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+}
+
+.custom-marker:hover {
+    animation: markerPulse 1.5s infinite;
+    z-index: 1000 !important;
+}
+
+/* Стили для элементов легенды */
+.legend-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border-left: 4px solid transparent;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.legend-item:hover {
+    transform: translateX(5px);
+    background: rgba(255,255,255,0.1);
+}
+
+/* Цветные индикаторы координат */
+.coord-precise {
+    background: #2ecc71;
+}
+
+.coord-approximate {
+    background: #f39c12;
     position: relative;
-    background: conic-gradient(
-        var(--color-1) 0% var(--percent-1),
-        var(--color-2) 0% var(--percent-2),
-        var(--color-3) 0% var(--percent-3),
-        var(--color-4) 0% var(--percent-4),
-        var(--color-5) 0% var(--percent-5),
-        #e0e0e0 0%
-    );
+}
+
+.coord-approximate::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 6px;
+    height: 6px;
+    background: #f39c12;
+    border-radius: 50%;
+    border: 1px solid white;
 }
