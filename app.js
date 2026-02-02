@@ -13,6 +13,12 @@ let updateInterval;
 let markersMap = new Map();
 let isLoading = false;
 
+// Динамические настройки из данных
+let dynamicStatusMapping = {};
+let dynamicStatusColors = {
+    'default': '#95a5a6'
+};
+
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
 
 function initApp() {
@@ -51,15 +57,15 @@ function initMap() {
                 const count = cluster.getChildCount();
                 const markers = cluster.getAllChildMarkers();
                 
-                let color = CONFIG.STATUS_COLORS.default;
+                let color = dynamicStatusColors.default;
                 const statuses = markers.map(m => m.options.status);
                 
-                if (statuses.includes('Закрыта')) {
-                    color = CONFIG.STATUS_COLORS['Закрыта'] || '#e74c3c';
-                } else if (statuses.includes('На паузе')) {
-                    color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
-                } else if (statuses.includes('Активная')) {
-                    color = CONFIG.STATUS_COLORS['Активная'] || '#2ecc71';
+                // Находим цвет для кластера на основе статусов точек
+                for (const status of statuses) {
+                    if (dynamicStatusColors[status]) {
+                        color = dynamicStatusColors[status];
+                        break;
+                    }
                 }
                 
                 return L.divIcon({
@@ -176,12 +182,18 @@ async function loadData() {
         allPoints = processData(data);
         console.log(`Обработано точек: ${allPoints.length}`);
         
+        // Определяем динамические настройки на основе данных
+        determineDynamicSettings(allPoints);
+        
         // Показываем несколько точек для отладки
         if (allPoints.length > 0) {
             console.log('Примеры обработанных точек:');
             allPoints.slice(0, 5).forEach((point, i) => {
                 console.log(`${i+1}. Название: "${point.name}" | Регион: "${point.region}" | Статус: "${point.status}" | Адрес: "${point.address?.substring(0, 50)}..."`);
             });
+            
+            console.log('Статусы из данных:', Object.keys(dynamicStatusMapping));
+            console.log('Цвета статусов:', dynamicStatusColors);
         }
         
         allPoints = await addCoordinatesFast(allPoints);
@@ -301,6 +313,82 @@ function parseCSV(csvText) {
 
 // ========== ОБРАБОТКА ДАННЫХ ==========
 
+function determineDynamicSettings(points) {
+    console.log('Определение динамических настроек из данных...');
+    
+    // Собираем все уникальные статусы из данных
+    const uniqueStatuses = new Set();
+    points.forEach(point => {
+        if (point.status && point.status.trim() !== '') {
+            uniqueStatuses.add(point.status.trim());
+        }
+    });
+    
+    console.log('Уникальные статусы из данных:', Array.from(uniqueStatuses));
+    
+    // Создаем маппинг статусов (пока что 1:1, но можно добавить нормализацию)
+    dynamicStatusMapping = {};
+    Array.from(uniqueStatuses).forEach(status => {
+        dynamicStatusMapping[status] = status; // Можно добавить нормализацию здесь
+    });
+    
+    // Генерируем цвета для статусов
+    generateStatusColors(Array.from(uniqueStatuses));
+}
+
+function generateStatusColors(statuses) {
+    console.log('Генерация цветов для статусов:', statuses);
+    
+    // Предопределенные цвета для частых статусов
+    const predefinedColors = {
+        // Статусы монтажа из вашего примера
+        'В очереди': '#f39c12',     // оранжевый
+        'Первичный': '#3498db',     // синий
+        'Финальный': '#9b59b6',     // фиолетовый
+        'Выполнен': '#2ecc71',      // зеленый
+        'Есть проблемы': '#e74c3c', // красный
+        
+        // Другие возможные статусы
+        'Активная': '#2ecc71',      // зеленый
+        'На паузе': '#f39c12',      // оранжевый
+        'Закрыта': '#e74c3c',       // красный
+        'План': '#3498db',          // синий
+        'Сдан': '#2ecc71',          // зеленый
+        'Отправлен ФО, не принят': '#f39c12' // оранжевый
+    };
+    
+    // Цветовая палитра для остальных статусов
+    const colorPalette = [
+        '#1abc9c', '#16a085', // бирюзовые
+        '#27ae60', '#2ecc71', // зеленые
+        '#3498db', '#2980b9', // синие
+        '#9b59b6', '#8e44ad', // фиолетовые
+        '#34495e', '#2c3e50', // темные
+        '#f1c40f', '#f39c12', // желтые/оранжевые
+        '#e67e22', '#d35400', // оранжевые
+        '#e74c3c', '#c0392b', // красные
+        '#ecf0f1', '#bdc3c7'  // светлые
+    ];
+    
+    // Сначала используем предопределенные цвета
+    statuses.forEach((status, index) => {
+        if (predefinedColors[status]) {
+            dynamicStatusColors[status] = predefinedColors[status];
+        }
+    });
+    
+    // Затем генерируем цвета для остальных статусов
+    let colorIndex = 0;
+    statuses.forEach(status => {
+        if (!dynamicStatusColors[status]) {
+            dynamicStatusColors[status] = colorPalette[colorIndex % colorPalette.length];
+            colorIndex++;
+        }
+    });
+    
+    console.log('Сгенерированные цвета:', dynamicStatusColors);
+}
+
 function processData(rows) {
     console.log('Начинаю обработку данных...');
     
@@ -345,6 +433,7 @@ function processData(rows) {
             status: '',
             manager: '',
             contractor: '',
+            project: '', // Добавляем поле проекта
             originalAddress: '',
             originalStatus: ''
         };
@@ -367,14 +456,15 @@ function processData(rows) {
         point.status = cleanString(point.status);
         point.manager = cleanString(point.manager);
         point.contractor = cleanString(point.contractor);
+        point.project = cleanString(point.project);
         
         // Сохраняем оригинальный адрес
         point.originalAddress = point.address || '';
         
-        // Нормализуем статус
-        if (point.status && CONFIG.STATUS_MAPPING) {
+        // Нормализуем статус (используем динамический маппинг)
+        if (point.status && dynamicStatusMapping[point.status]) {
             point.originalStatus = point.status;
-            point.status = CONFIG.STATUS_MAPPING[point.status] || point.status;
+            point.status = dynamicStatusMapping[point.status];
         }
         
         // Исправляем возможные ошибки в данных
@@ -433,18 +523,22 @@ function processDataSimple(rows) {
     let regionIndex = -1;
     let addressIndex = -1;
     let statusIndex = -1;
+    let projectIndex = -1;
     
     headers.forEach((header, index) => {
         const h = header.toLowerCase();
-        if (h.includes('регион')) regionIndex = index;
+        if (h.includes('название') || h.includes('имя') || h.includes('точка')) nameIndex = index;
+        else if (h.includes('регион')) regionIndex = index;
         else if (h.includes('адрес')) addressIndex = index;
         else if (h.includes('статус')) statusIndex = index;
+        else if (h.includes('проект')) projectIndex = index;
     });
     
     // Если не нашли явные заголовки, предполагаем порядок
     if (regionIndex === -1 && headers.length > 1) regionIndex = 1;
     if (addressIndex === -1 && headers.length > 2) addressIndex = 2;
     if (statusIndex === -1 && headers.length > 3) statusIndex = 3;
+    if (projectIndex === -1 && headers.length > 4) projectIndex = 4;
     
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
@@ -462,6 +556,7 @@ function processDataSimple(rows) {
             status: '',
             manager: '',
             contractor: '',
+            project: '',
             isMock: true
         };
         
@@ -470,15 +565,16 @@ function processDataSimple(rows) {
         if (regionIndex !== -1 && row.length > regionIndex) point.region = cleanString(row[regionIndex]);
         if (addressIndex !== -1 && row.length > addressIndex) point.address = cleanString(row[addressIndex]);
         if (statusIndex !== -1 && row.length > statusIndex) point.status = cleanString(row[statusIndex]);
+        if (projectIndex !== -1 && row.length > projectIndex) point.project = cleanString(row[projectIndex]);
         
         // Остальные поля (менеджер, подрядчик) - в следующих столбцах
-        if (row.length > 4) point.manager = cleanString(row[4]);
-        if (row.length > 5) point.contractor = cleanString(row[5]);
+        if (row.length > 5) point.manager = cleanString(row[5]);
+        if (row.length > 6) point.contractor = cleanString(row[6]);
         
-        // Нормализуем статус
-        if (point.status && CONFIG.STATUS_MAPPING) {
+        // Нормализуем статус (используем динамический маппинг)
+        if (point.status && dynamicStatusMapping[point.status]) {
             point.originalStatus = point.status;
-            point.status = CONFIG.STATUS_MAPPING[point.status] || point.status;
+            point.status = dynamicStatusMapping[point.status];
         }
         
         // Если адрес содержит несколько частей через ",," - разбираем
@@ -487,8 +583,8 @@ function processDataSimple(rows) {
             point.address = parts[0] || '';
             if (!point.status && parts[1]) {
                 point.status = parts[1];
-                if (CONFIG.STATUS_MAPPING[point.status]) {
-                    point.status = CONFIG.STATUS_MAPPING[point.status];
+                if (dynamicStatusMapping[point.status]) {
+                    point.status = dynamicStatusMapping[point.status];
                 }
             }
             if (!point.manager && parts[2]) point.manager = parts[2];
@@ -535,30 +631,34 @@ function findColumnIndices(headers) {
         address: -1,
         status: -1,
         manager: -1,
-        contractor: -1
+        contractor: -1,
+        project: -1
     };
     
     const headersLower = headers.map(h => h.toString().toLowerCase().trim());
     
     // Поиск по ключевым словам
     headersLower.forEach((header, index) => {
-        if (header.includes('название') || header.includes('имя') || header.includes('точка')) {
+        if (header.includes('название') || header.includes('имя') || header.includes('точка') || header.includes('тт')) {
             if (indices.name === -1) indices.name = index;
         }
-        if (header.includes('регион') || header.includes('область') || header.includes('край')) {
+        if (header.includes('регион') || header.includes('область') || header.includes('край') || header.includes('респ')) {
             if (indices.region === -1) indices.region = index;
         }
-        if (header.includes('адрес') || header.includes('улица') || header.includes('местоположение')) {
+        if (header.includes('адрес') || header.includes('улица') || header.includes('местоположение') || header.includes('location')) {
             if (indices.address === -1) indices.address = index;
         }
-        if (header.includes('статус')) {
+        if (header.includes('статус') || header.includes('состояние')) {
             if (indices.status === -1) indices.status = index;
         }
-        if (header.includes('менеджер') || header.includes('ответственный')) {
+        if (header.includes('менеджер') || header.includes('ответственный') || header.includes('фио')) {
             if (indices.manager === -1) indices.manager = index;
         }
-        if (header.includes('подрядчик') || header.includes('исполнитель')) {
+        if (header.includes('подрядчик') || header.includes('исполнитель') || header.includes('контрагент')) {
             if (indices.contractor === -1) indices.contractor = index;
+        }
+        if (header.includes('проект')) {
+            if (indices.project === -1) indices.project = index;
         }
     });
     
@@ -635,18 +735,12 @@ function showPointsOnMap() {
 }
 
 function createMarker(point) {
-    let color = CONFIG.STATUS_COLORS.default;
+    let color = dynamicStatusColors.default;
     const status = point.status || '';
-    const statusLower = status.toLowerCase();
     
-    if (status === 'Активная' || statusLower.includes('сдан') || statusLower.includes('актив')) {
-        color = CONFIG.STATUS_COLORS['Активная'] || '#2ecc71';
-    } else if (status === 'На паузе' || statusLower.includes('пауз') || statusLower.includes('отправлен')) {
-        color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
-    } else if (status === 'Закрыта' || statusLower.includes('закрыт')) {
-        color = CONFIG.STATUS_COLORS['Закрыта'] || '#e74c3c';
-    } else if (status === 'План' || statusLower.includes('план')) {
-        color = CONFIG.STATUS_COLORS['План'] || '#3498db';
+    // Используем динамические цвета
+    if (status && dynamicStatusColors[status]) {
+        color = dynamicStatusColors[status];
     }
     
     let accuracyIcon = '';
@@ -698,7 +792,10 @@ function createMarker(point) {
 }
 
 function createPopupContent(point) {
-    const color = CONFIG.STATUS_COLORS[point.status] || CONFIG.STATUS_COLORS.default;
+    let color = dynamicStatusColors.default;
+    if (point.status && dynamicStatusColors[point.status]) {
+        color = dynamicStatusColors[point.status];
+    }
     
     let displayAddress = point.address || '';
     if (displayAddress) {
@@ -742,6 +839,13 @@ function createPopupContent(point) {
             ` : ''}
             
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+                ${point.project ? `
+                    <div>
+                        <strong>Проект:</strong><br>
+                        ${point.project}
+                    </div>
+                ` : ''}
+                
                 ${point.manager ? `
                     <div>
                         <strong>Менеджер:</strong><br>
@@ -781,16 +885,23 @@ function updateFilters() {
     };
     
     allPoints.forEach(point => {
-        if (point.project) filters.projects.add(point.project);
-        if (point.region) filters.regions.add(point.region);
-        if (point.status) filters.statuses.add(point.status);
-        if (point.manager) filters.managers.add(point.manager);
+        if (point.project && point.project.trim() !== '') filters.projects.add(point.project);
+        if (point.region && point.region.trim() !== '') filters.regions.add(point.region);
+        if (point.status && point.status.trim() !== '') filters.statuses.add(point.status);
+        if (point.manager && point.manager.trim() !== '') filters.managers.add(point.manager);
     });
     
+    // Сортируем фильтры для удобства
     fillFilter('filter-project', Array.from(filters.projects).sort());
     fillFilter('filter-region', Array.from(filters.regions).sort());
     fillFilter('filter-status', Array.from(filters.statuses).sort());
     fillFilter('filter-manager', Array.from(filters.managers).sort());
+    
+    console.log('Доступные фильтры:');
+    console.log('- Проекты:', Array.from(filters.projects));
+    console.log('- Регионы:', Array.from(filters.regions));
+    console.log('- Статусы:', Array.from(filters.statuses));
+    console.log('- Менеджеры:', Array.from(filters.managers));
 }
 
 function fillFilter(selectId, options) {
@@ -805,6 +916,13 @@ function fillFilter(selectId, options) {
             const opt = document.createElement('option');
             opt.value = option;
             opt.textContent = option;
+            
+            // Сохраняем цвет статуса в data-атрибуте
+            if (selectId === 'filter-status' && dynamicStatusColors[option]) {
+                opt.dataset.color = dynamicStatusColors[option];
+                opt.style.color = dynamicStatusColors[option];
+                opt.style.fontWeight = 'bold';
+            }
             
             if (selected.includes(option)) {
                 opt.selected = true;
@@ -822,6 +940,8 @@ function applyFilters() {
     activeFilters.regions = getSelectedValues('filter-region');
     activeFilters.statuses = getSelectedValues('filter-status');
     activeFilters.managers = getSelectedValues('filter-manager');
+    
+    console.log('Активные фильтры:', activeFilters);
     
     showPointsOnMap();
     showNotification('Фильтры применены', 'success');
@@ -898,7 +1018,8 @@ function searchPoints() {
             (point.name && point.name.toLowerCase().includes(query)) ||
             (point.address && point.address.toLowerCase().includes(query)) ||
             (point.region && point.region.toLowerCase().includes(query)) ||
-            (point.manager && point.manager.toLowerCase().includes(query))
+            (point.manager && point.manager.toLowerCase().includes(query)) ||
+            (point.project && point.project.toLowerCase().includes(query))
         );
     });
     
@@ -941,13 +1062,9 @@ function showPointDetails(point) {
     
     if (!container || !infoSection) return;
     
-    let color = CONFIG.STATUS_COLORS.default;
-    const status = point.status || '';
-    
-    if (status === 'Активная') {
-        color = CONFIG.STATUS_COLORS['Активная'] || '#2ecc71';
-    } else if (status === 'На паузе') {
-        color = CONFIG.STATUS_COLORS['На паузе'] || '#f39c12';
+    let color = dynamicStatusColors.default;
+    if (point.status && dynamicStatusColors[point.status]) {
+        color = dynamicStatusColors[point.status];
     }
     
     container.innerHTML = `
@@ -972,6 +1089,13 @@ function showPointDetails(point) {
                 <p style="margin-bottom: 8px;">
                     <strong>Регион:</strong><br>
                     <span style="font-size: 14px;">${point.region}</span>
+                </p>
+            ` : ''}
+            
+            ${point.project ? `
+                <p style="margin-bottom: 8px;">
+                    <strong>Проект:</strong><br>
+                    <span style="font-size: 14px;">${point.project}</span>
                 </p>
             ` : ''}
             
@@ -1029,27 +1153,64 @@ function updateLegend() {
     const container = document.getElementById('legend');
     if (!container) return;
     
-    let legendHTML = '';
+    let legendHTML = '<h5><i class="fas fa-key"></i> Легенда статусов</h5>';
     const statuses = new Set();
     
-    allPoints.forEach(point => {
+    // Собираем все статусы из отфильтрованных точек
+    const filteredPoints = filterPoints();
+    filteredPoints.forEach(point => {
         if (point.status) statuses.add(point.status);
     });
     
-    ['Активная', 'На паузе', 'Закрыта', 'План'].forEach(status => {
-        if (!statuses.has(status)) statuses.add(status);
+    // Если в отфильтрованных точках мало статусов, показываем все
+    if (statuses.size < 3) {
+        allPoints.forEach(point => {
+            if (point.status) statuses.add(point.status);
+        });
+    }
+    
+    // Сортируем статусы для красивого отображения
+    const sortedStatuses = Array.from(statuses).sort((a, b) => {
+        // Приоритетные статусы показываем первыми
+        const priorityOrder = ['Выполнен', 'Финальный', 'Первичный', 'В очереди', 'Есть проблемы'];
+        const indexA = priorityOrder.indexOf(a);
+        const indexB = priorityOrder.indexOf(b);
+        
+        if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        
+        return a.localeCompare(b);
     });
     
-    Array.from(statuses).sort().forEach(status => {
-        let color = CONFIG.STATUS_COLORS[status] || CONFIG.STATUS_COLORS.default;
+    sortedStatuses.forEach(status => {
+        let color = dynamicStatusColors[status] || dynamicStatusColors.default;
+        
+        // Подсчитываем количество точек с этим статусом
+        const count = allPoints.filter(p => p.status === status).length;
+        const filteredCount = filteredPoints.filter(p => p.status === status).length;
         
         legendHTML += `
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                <div style="width: 15px; height: 15px; border-radius: 50%; background: ${color}; border: 2px solid white;"></div>
-                <span style="font-size: 12px;">${status}</span>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 5px; background: rgba(255,255,255,0.1); border-radius: 4px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 15px; height: 15px; border-radius: 50%; background: ${color}; border: 2px solid white;"></div>
+                    <span style="font-size: 12px; color: white;">${status}</span>
+                </div>
+                <div style="font-size: 11px; color: #95a5a6;">
+                    ${filteredCount}/${count}
+                </div>
             </div>
         `;
     });
+    
+    // Если нет статусов, показываем сообщение
+    if (sortedStatuses.length === 0) {
+        legendHTML += `
+            <div style="text-align: center; padding: 10px; color: #95a5a6; font-size: 12px;">
+                <i class="fas fa-info-circle"></i> Нет данных о статусах
+            </div>
+        `;
+    }
     
     container.innerHTML = legendHTML;
 }
@@ -1074,9 +1235,10 @@ function showDemoData() {
             name: 'Магнит №123',
             region: 'Москва',
             address: 'ул. Тверская, д. 1',
-            status: 'Активная',
+            status: 'В очереди',
             manager: 'Иванов И.И.',
             contractor: 'Иванов И.И.',
+            project: 'Проект А',
             lat: 55.7570,
             lng: 37.6145,
             isMock: false
@@ -1086,9 +1248,10 @@ function showDemoData() {
             name: 'Магнит №124',
             region: 'Московская обл.',
             address: 'г. Химки, ул. Ленина, 25',
-            status: 'Активная',
-            manager: 'Иванов И.И.',
-            contractor: 'Иванов И.И.',
+            status: 'Первичный',
+            manager: 'Петров П.П.',
+            contractor: 'Сидоров С.С.',
+            project: 'Проект Б',
             lat: 55.8890,
             lng: 37.4450,
             isMock: false
@@ -1098,14 +1261,44 @@ function showDemoData() {
             name: 'Басенджи',
             region: 'Алтайский край',
             address: 'Алтайский край, Мамонтово (с), ул. Партизанская, 158',
-            status: 'Активная',
+            status: 'Финальный',
             manager: 'Казак Светлана',
             contractor: 'Дмитриев Александр',
+            project: 'Проект В',
             lat: 53.3481 + (Math.random() - 0.5) * 0.5,
             lng: 83.7794 + (Math.random() - 0.5) * 1.0,
             isMock: true
+        },
+        {
+            id: 'demo_4',
+            name: 'Супермаркет №5',
+            region: 'Краснодарский край',
+            address: 'г. Краснодар, ул. Красная, 100',
+            status: 'Выполнен',
+            manager: 'Смирнова Ольга',
+            contractor: 'Кузнецов Михаил',
+            project: 'Проект Г',
+            lat: 45.0355 + (Math.random() - 0.5) * 0.2,
+            lng: 38.9753 + (Math.random() - 0.5) * 0.2,
+            isMock: true
+        },
+        {
+            id: 'demo_5',
+            name: 'Гипермаркет №7',
+            region: 'Свердловская обл.',
+            address: 'г. Екатеринбург, пр-кт Ленина, 50',
+            status: 'Есть проблемы',
+            manager: 'Васильев А.А.',
+            contractor: 'Николаев Н.Н.',
+            project: 'Проект Д',
+            lat: 56.8389 + (Math.random() - 0.5) * 0.2,
+            lng: 60.6057 + (Math.random() - 0.5) * 0.2,
+            isMock: true
         }
     ];
+    
+    // Определяем динамические настройки для демо-данных
+    determineDynamicSettings(allPoints);
     
     updateFilters();
     updateStatistics();
