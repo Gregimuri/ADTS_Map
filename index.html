@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек</title>
+    <title>Карта торговых точек ADTS</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -51,6 +51,13 @@
             padding: 5px;
             background: rgba(255,255,255,0.1);
             border-radius: 4px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .legend-item:hover {
+            transform: translateX(5px);
+            background: rgba(255,255,255,0.2);
         }
         
         .legend-color {
@@ -68,6 +75,13 @@
             padding: 2px 6px;
             border-radius: 10px;
         }
+        
+        /* Анимация пульсации маркеров */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -76,7 +90,7 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ</h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ ADTS</h1>
                 <div class="status" id="status">
                     <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
                 </div>
@@ -188,21 +202,53 @@
                 <div id="point-details"></div>
             </div>
             
-            <!-- Легенда точности -->
+            <!-- Легенда статусов ADTS -->
             <div class="legend-mini" style="padding: 15px; background: rgba(0,0,0,0.1); margin: 20px; border-radius: 8px;">
-                <h5 style="color: white; margin-bottom: 10px; font-size: 14px;">
-                    <i class="fas fa-map-pin"></i> Легенда координат
+                <h5 style="color: white; margin-bottom: 15px; font-size: 14px;">
+                    <i class="fas fa-palette"></i> Цвета статусов ADTS
                 </h5>
-                <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: #2ecc71; border-radius: 50%; border: 2px solid white;"></div>
-                        <span style="font-size: 12px; color: #ecf0f1;">Точные координаты</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: #f39c12; border-radius: 50%; border: 2px solid white; position: relative;">
-                            <div style="position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; background: #f39c12; border-radius: 50%; border: 1px solid white;"></div>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #2ecc71;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Выполнен</span>
                         </div>
-                        <span style="font-size: 12px; color: #ecf0f1;">Приблизительные</span>
+                        <span id="count-completed" style="font-size: 11px; color: #95a5a6;">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #e74c3c;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Нет оборудования</span>
+                        </div>
+                        <span id="count-no-equipment" style="font-size: 11px; color: #95a5a6;">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #3498db;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">В очереди</span>
+                        </div>
+                        <span id="count-queue" style="font-size: 11px; color: #95a5a6;">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #f1c40f;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Первичный</span>
+                        </div>
+                        <span id="count-primary" style="font-size: 11px; color: #95a5a6;">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #9b59b6;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Финальный</span>
+                        </div>
+                        <span id="count-final" style="font-size: 11px; color: #95a5a6;">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #95a5a6;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Доработка</span>
+                        </div>
+                        <span id="count-rework" style="font-size: 11px; color: #95a5a6;">0</span>
                     </div>
                 </div>
             </div>
@@ -218,76 +264,9 @@
                 <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
             </div>
             
-           <!-- Легенда статусов ADTS -->
-<div class="legend-mini" style="padding: 15px; background: rgba(0,0,0,0.1); margin: 20px; border-radius: 8px;">
-    <h5 style="color: white; margin-bottom: 15px; font-size: 14px;">
-        <i class="fas fa-palette"></i> Цвета статусов ADTS
-    </h5>
-    <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #2ecc71;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Выполнен</span>
-            </div>
-            <span id="count-completed" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #e74c3c;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Нет оборудования</span>
-            </div>
-            <span id="count-no-equipment" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #3498db;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">В очереди</span>
-            </div>
-            <span id="count-queue" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #f1c40f;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Первичный</span>
-            </div>
-            <span id="count-primary" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #9b59b6;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Финальный</span>
-            </div>
-            <span id="count-final" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #95a5a6;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Доработка</span>
-            </div>
-            <span id="count-rework" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-    </div>
-</div>
-            
-            <!-- Быстрые фильтры -->
-            <div class="quick-filters" style="position: absolute; top: 80px; right: 20px; z-index: 1000; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); max-width: 200px;">
-                <h6 style="margin: 0 0 10px 0; color: #2c3e50; font-size: 14px;">
-                    <i class="fas fa-bolt"></i> Быстрые фильтры
-                </h6>
-                <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <button onclick="filterByStatus('Выполнен')" style="background: #2ecc71; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
-                        <i class="fas fa-check-circle"></i> Выполненные
-                    </button>
-                    <button onclick="filterByStatus('Есть проблемы')" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
-                        <i class="fas fa-exclamation-triangle"></i> С проблемами
-                    </button>
-                    <button onclick="filterByStatus('В очереди')" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
-                        <i class="fas fa-clock"></i> В очереди
-                    </button>
-                    <button onclick="clearFilters()" style="background: #95a5a6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
-                        <i class="fas fa-times"></i> Сбросить все
-                    </button>
-                </div>
+            <!-- Легенда статусов -->
+            <div class="legend">
+                <div id="legend"></div>
             </div>
         </div>
     </div>
@@ -313,23 +292,6 @@
     
     <!-- Дополнительные функции -->
     <script>
-        // Функция для быстрого фильтра по статусу
-        function filterByStatus(status) {
-            const statusSelect = document.getElementById('filter-status');
-            // Очищаем все выборы
-            Array.from(statusSelect.options).forEach(option => {
-                option.selected = false;
-            });
-            // Выбираем нужный статус
-            Array.from(statusSelect.options).forEach(option => {
-                if (option.value === status) {
-                    option.selected = true;
-                }
-            });
-            applyFilters();
-            showNotification(`Фильтр по статусу: ${status}`, 'success');
-        }
-        
         // Функция поиска из сайдбара
         function searchPointsSidebar() {
             const searchInput = document.getElementById('search-sidebar');
@@ -369,7 +331,22 @@
                 updateLegend();
             }
         }
+        
+        // Функция для фильтрации по клику на статус в легенде
+        function filterByStatus(status) {
+            const statusSelect = document.getElementById('filter-status');
+            // Очищаем все выборы
+            Array.from(statusSelect.options).forEach(option => {
+                option.selected = false;
+            });
+            // Выбираем нужный статус
+            Array.from(statusSelect.options).forEach(option => {
+                if (option.value === status) {
+                    option.selected = true;
+                }
+            });
+            applyFilters();
+        }
     </script>
 </body>
 </html>
-
