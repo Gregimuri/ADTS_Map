@@ -50,14 +50,13 @@ const CONFIG = {
         interval: 300000 // 5 минут
     },
     
-    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Улучшенная версия)
+    // НАСТРОЙКИ ГЕОКОДИРОВАНИЯ (Упрощенная версия - только OSM)
     GEOCODING: {
         enabled: true,
         
         // Задержки между запросами (мс)
         delays: {
-            yandex: 1000,     // 1 секунда между запросами к Яндексу
-            nominatim: 2000   // 2 секунды между запросами к OSM
+            nominatim: 1500   // 1.5 секунды между запросами к OSM
         },
         
         // Максимальное количество одновременных запросов
@@ -70,24 +69,10 @@ const CONFIG = {
         cacheDays: 30,
         
         // Максимальное количество попыток
-        maxRetries: 3,
-        
-        // Показывать приблизительные координаты до уточнения
-        showApproximate: true,
+        maxRetries: 2,
         
         // Пользовательский агент для OSM
         osmUserAgent: 'TTMapApp/1.0',
-        
-        // Настройки прокси для Яндекса
-        proxy: {
-            urls: [
-                'https://thingproxy.freeboard.io/fetch/',
-                'https://api.corsproxy.io/?',
-                'https://cors-anywhere.herokuapp.com/'
-            ],
-            currentIndex: 0,
-            timeout: 10000 // 10 секунд таймаут
-        },
         
         // Альтернативные сервисы геокодирования
         alternativeServices: {
@@ -100,4 +85,3 @@ const CONFIG = {
         }
     }
 };
-
