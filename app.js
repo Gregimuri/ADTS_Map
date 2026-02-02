@@ -170,9 +170,19 @@ async function loadData() {
             throw new Error('Не удалось загрузить данные');
         }
         
-        console.log(`Данные загружены: ${data.length} строк`);
+        console.log(`Данные загружены: ${data.length} строк, ${data[0]?.length || 0} столбцов`);
+        console.log('Первые 3 строки данных:', data.slice(0, 3));
+        
         allPoints = processData(data);
         console.log(`Обработано точек: ${allPoints.length}`);
+        
+        // Показываем несколько точек для отладки
+        if (allPoints.length > 0) {
+            console.log('Примеры обработанных точек:');
+            allPoints.slice(0, 5).forEach((point, i) => {
+                console.log(`${i+1}. Название: "${point.name}" | Регион: "${point.region}" | Статус: "${point.status}" | Адрес: "${point.address?.substring(0, 50)}..."`);
+            });
+        }
         
         allPoints = await addCoordinatesFast(allPoints);
         console.log(`Координаты добавлены: ${allPoints.length}`);
@@ -271,6 +281,7 @@ function parseCSV(csvText) {
                     cleaned = cleaned.substring(1, cleaned.length - 1);
                 }
                 cleaned = cleaned.replace(/""/g, '"');
+                cleaned = cleaned.replace(/\r/g, '');
                 return cleaned;
             });
             
@@ -279,6 +290,7 @@ function parseCSV(csvText) {
             }
         }
         
+        console.log(`CSV распарсен: ${result.length} строк`);
         return result;
         
     } catch (error) {
@@ -298,8 +310,25 @@ function processData(rows) {
     
     const points = [];
     const headers = rows[0].map(h => h.toString().trim());
-    const colIndices = findColumnIndices(headers);
     
+    // Выводим заголовки для отладки
+    console.log('Заголовки столбцов:', headers);
+    console.log('Количество столбцов:', headers.length);
+    
+    // Пытаемся найти правильные индексы столбцов
+    const colIndices = findColumnIndices(headers);
+    console.log('Найденные индексы столбцов:', colIndices);
+    
+    // Если у нас мало столбцов или они не распознаны, используем простой подход
+    const useSimpleApproach = headers.length < 3 || 
+                              Object.values(colIndices).filter(idx => idx !== -1).length < 3;
+    
+    if (useSimpleApproach) {
+        console.log('Использую простой подход к парсингу данных');
+        return processDataSimple(rows);
+    }
+    
+    // Используем продвинутый подход с распознаванием столбцов
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         
@@ -320,22 +349,58 @@ function processData(rows) {
             originalStatus: ''
         };
         
+        // Заполняем данные по найденным индексам
         Object.keys(colIndices).forEach(key => {
             const index = colIndices[key];
-            if (index !== -1 && index < row.length && row[index]) {
+            if (index !== -1 && index < row.length) {
                 const value = row[index].toString().trim();
-                if (value) point[key] = value;
+                if (value && value !== 'undefined' && value !== 'null') {
+                    point[key] = value;
+                }
             }
         });
+        
+        // Очищаем данные
+        point.name = cleanString(point.name);
+        point.region = cleanString(point.region);
+        point.address = cleanString(point.address);
+        point.status = cleanString(point.status);
+        point.manager = cleanString(point.manager);
+        point.contractor = cleanString(point.contractor);
         
         // Сохраняем оригинальный адрес
         point.originalAddress = point.address || '';
         
+        // Нормализуем статус
         if (point.status && CONFIG.STATUS_MAPPING) {
             point.originalStatus = point.status;
             point.status = CONFIG.STATUS_MAPPING[point.status] || point.status;
         }
         
+        // Исправляем возможные ошибки в данных
+        
+        // Если адрес пустой, но есть данные в других полях
+        if (!point.address && point.region && point.region.includes(',')) {
+            // Возможно, адрес попал в поле региона
+            point.address = point.region;
+            point.region = '';
+        }
+        
+        // Если статус содержит запятые и похож на объединенные данные
+        if (point.status && point.status.includes(',') && point.status.length > 20) {
+            const parts = point.status.split(',');
+            if (parts.length >= 2) {
+                point.status = parts[0].trim();
+                if (!point.manager && parts[1]) {
+                    point.manager = parts[1].trim();
+                }
+                if (!point.contractor && parts[2]) {
+                    point.contractor = parts[2].trim();
+                }
+            }
+        }
+        
+        // Если у точки нет имени, создаем его
         if (!point.name || point.name.trim() === '') {
             if (point.address) {
                 const firstPart = point.address.split(',')[0];
@@ -347,13 +412,120 @@ function processData(rows) {
             }
         }
         
-        if (point.name || point.address || point.region) {
+        // Добавляем точку, если есть минимальные данные
+        if (point.name && (point.address || point.region || point.status)) {
             points.push(point);
         }
     }
     
-    console.log(`Обработано точек: ${points.length}`);
+    console.log(`Обработано точек (продвинутый метод): ${points.length}`);
     return points;
+}
+
+function processDataSimple(rows) {
+    console.log('Использую простой метод обработки данных...');
+    
+    const points = [];
+    const headers = rows[0] || [];
+    
+    // Определяем вероятный порядок столбцов на основе заголовков
+    let nameIndex = 0;
+    let regionIndex = -1;
+    let addressIndex = -1;
+    let statusIndex = -1;
+    
+    headers.forEach((header, index) => {
+        const h = header.toLowerCase();
+        if (h.includes('регион')) regionIndex = index;
+        else if (h.includes('адрес')) addressIndex = index;
+        else if (h.includes('статус')) statusIndex = index;
+    });
+    
+    // Если не нашли явные заголовки, предполагаем порядок
+    if (regionIndex === -1 && headers.length > 1) regionIndex = 1;
+    if (addressIndex === -1 && headers.length > 2) addressIndex = 2;
+    if (statusIndex === -1 && headers.length > 3) statusIndex = 3;
+    
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        
+        if (!row || row.length === 0) {
+            continue;
+        }
+        
+        const point = {
+            id: `point_${i}_${Date.now()}`,
+            sheetRow: i + 1,
+            name: '',
+            region: '',
+            address: '',
+            status: '',
+            manager: '',
+            contractor: '',
+            isMock: true
+        };
+        
+        // Заполняем данные по индексам
+        if (row.length > nameIndex) point.name = cleanString(row[nameIndex]);
+        if (regionIndex !== -1 && row.length > regionIndex) point.region = cleanString(row[regionIndex]);
+        if (addressIndex !== -1 && row.length > addressIndex) point.address = cleanString(row[addressIndex]);
+        if (statusIndex !== -1 && row.length > statusIndex) point.status = cleanString(row[statusIndex]);
+        
+        // Остальные поля (менеджер, подрядчик) - в следующих столбцах
+        if (row.length > 4) point.manager = cleanString(row[4]);
+        if (row.length > 5) point.contractor = cleanString(row[5]);
+        
+        // Нормализуем статус
+        if (point.status && CONFIG.STATUS_MAPPING) {
+            point.originalStatus = point.status;
+            point.status = CONFIG.STATUS_MAPPING[point.status] || point.status;
+        }
+        
+        // Если адрес содержит несколько частей через ",," - разбираем
+        if (point.address && point.address.includes(',,')) {
+            const parts = point.address.split(',,');
+            point.address = parts[0] || '';
+            if (!point.status && parts[1]) {
+                point.status = parts[1];
+                if (CONFIG.STATUS_MAPPING[point.status]) {
+                    point.status = CONFIG.STATUS_MAPPING[point.status];
+                }
+            }
+            if (!point.manager && parts[2]) point.manager = parts[2];
+            if (!point.contractor && parts[3]) point.contractor = parts[3];
+        }
+        
+        // Если нет имени, создаем
+        if (!point.name || point.name.trim() === '') {
+            if (point.address) {
+                const firstPart = point.address.split(',')[0];
+                point.name = firstPart.trim().substring(0, 30) + (firstPart.length > 30 ? '...' : '');
+            } else if (point.region) {
+                point.name = point.region + ' - Точка ' + i;
+            } else {
+                point.name = 'Точка ' + i;
+            }
+        }
+        
+        // Добавляем точку
+        if (point.name) {
+            points.push(point);
+        }
+    }
+    
+    console.log(`Обработано точек (простой метод): ${points.length}`);
+    return points;
+}
+
+function cleanString(str) {
+    if (!str) return '';
+    return str.toString()
+        .replace(/"/g, '')
+        .replace(/'/g, '')
+        .replace(/\r/g, '')
+        .replace(/\n/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 }
 
 function findColumnIndices(headers) {
@@ -368,27 +540,29 @@ function findColumnIndices(headers) {
     
     const headersLower = headers.map(h => h.toString().toLowerCase().trim());
     
-    const exactMatches = {
-        'название тт': 'name',
-        'регион': 'region', 
-        'адрес': 'address',
-        'статус тт': 'status',
-        'статус': 'status',
-        'менеджер фио': 'manager',
-        'менеджер': 'manager',
-        'подрядчик фио': 'contractor',
-        'подрядчик': 'contractor'
-    };
-    
+    // Поиск по ключевым словам
     headersLower.forEach((header, index) => {
-        if (exactMatches[header]) {
-            const field = exactMatches[header];
-            if (indices[field] === -1) {
-                indices[field] = index;
-            }
+        if (header.includes('название') || header.includes('имя') || header.includes('точка')) {
+            if (indices.name === -1) indices.name = index;
+        }
+        if (header.includes('регион') || header.includes('область') || header.includes('край')) {
+            if (indices.region === -1) indices.region = index;
+        }
+        if (header.includes('адрес') || header.includes('улица') || header.includes('местоположение')) {
+            if (indices.address === -1) indices.address = index;
+        }
+        if (header.includes('статус')) {
+            if (indices.status === -1) indices.status = index;
+        }
+        if (header.includes('менеджер') || header.includes('ответственный')) {
+            if (indices.manager === -1) indices.manager = index;
+        }
+        if (header.includes('подрядчик') || header.includes('исполнитель')) {
+            if (indices.contractor === -1) indices.contractor = index;
         }
     });
     
+    // Если некоторые столбцы не найдены, используем порядок по умолчанию
     let nextIndex = 0;
     Object.keys(indices).forEach(key => {
         if (indices[key] === -1) {
@@ -560,14 +734,14 @@ function createPopupContent(point) {
                 </div>
             ` : ''}
             
+            ${point.region ? `
+                <div style="margin-bottom: 10px;">
+                    <strong>Регион:</strong><br>
+                    <span style="font-size: 14px;">${point.region}</span>
+                </div>
+            ` : ''}
+            
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
-                ${point.region ? `
-                    <div>
-                        <strong>Регион:</strong><br>
-                        ${point.region}
-                    </div>
-                ` : ''}
-                
                 ${point.manager ? `
                     <div>
                         <strong>Менеджер:</strong><br>
@@ -794,6 +968,13 @@ function showPointDetails(point) {
                 </p>
             ` : ''}
             
+            ${point.region ? `
+                <p style="margin-bottom: 8px;">
+                    <strong>Регион:</strong><br>
+                    <span style="font-size: 14px;">${point.region}</span>
+                </p>
+            ` : ''}
+            
             ${point.lat && point.lng ? `
                 <p style="margin: 0;">
                     <strong>Координаты:</strong> ${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}
@@ -802,13 +983,6 @@ function showPointDetails(point) {
         </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
-            ${point.region ? `
-                <div>
-                    <strong>Регион:</strong><br>
-                    ${point.region}
-                </div>
-            ` : ''}
-            
             ${point.manager ? `
                 <div>
                     <strong>Менеджер:</strong><br>
@@ -1066,9 +1240,6 @@ function getRandomCoordinate(address, region = '') {
         'Самарская': { lat: 53.1959, lng: 50.1002 },
         'Самарская обл.': { lat: 53.1959, lng: 50.1002 },
         
-        'Саратовская': { lat: 51.5924, lng: 45.9608 },
-        'Саратовская обл.': { lat: 51.5924, lng: 45.9608 },
-        
         'Свердловская': { lat: 56.8389, lng: 60.6057 },
         'Свердловская обл.': { lat: 56.8389, lng: 60.6057 },
         
@@ -1176,8 +1347,6 @@ function getRandomCoordinate(address, region = '') {
     // Получаем регион из параметра
     const regionStr = (region || '').toString().trim();
     
-    console.log(`🔍 Определение координат для региона: "${regionStr}"`);
-    
     if (!regionStr) {
         console.log('⚠️ Регион не указан, использую центр России');
         radius = regionRadii.default;
@@ -1269,7 +1438,6 @@ function getRandomCoordinate(address, region = '') {
     };
 }
 
-
 // ========== ЭКСПОРТ ФУНКЦИЙ ==========
 
 window.loadData = loadData;
@@ -1277,5 +1445,3 @@ window.clearFilters = clearFilters;
 window.applyFilters = applyFilters;
 window.searchPoints = searchPoints;
 window.closeModal = closeModal;
-
-
