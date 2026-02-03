@@ -202,6 +202,19 @@
             <div class="filters">
                 <h3><i class="fas fa-filter"></i> Фильтры</h3>
                 
+                <!-- Новый фильтр: Листы -->
+                <div class="filter-group">
+                    <label for="filter-sheets">Листы (проекты):</label>
+                    <select id="filter-sheets" multiple class="filter-select" title="Удерживайте Ctrl для выбора нескольких листов">
+                        <option value="">Все листы</option>
+                    </select>
+                    <div class="filter-hint" id="sheets-count">0 листов</div>
+                    <div class="hint" style="margin-top: 3px; font-size: 11px;">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Каждый лист = отдельный проект</span>
+                    </div>
+                </div>
+                
                 <div class="filter-group">
                     <label for="filter-project">Проект:</label>
                     <select id="filter-project" multiple class="filter-select" title="Удерживайте Ctrl для выбора нескольких проектов">
@@ -494,6 +507,15 @@
             }
         });
         
+        document.getElementById('filter-sheets').addEventListener('change', function() {
+            if (typeof updateLegendFromApp === 'function') {
+                updateLegendFromApp();
+            }
+            if (typeof updateFilterCounts === 'function') {
+                updateFilterCounts();
+            }
+        });
+        
         // Функция для обновления счетчиков фильтров
         function updateFilterCounts() {
             const updateCount = (selectId, countElementId) => {
@@ -511,6 +533,7 @@
                 }
             };
             
+            updateCount('filter-sheets', 'sheets-count');
             updateCount('filter-project', 'project-count');
             updateCount('filter-region', 'region-count');
             updateCount('filter-status', 'status-count');
@@ -541,6 +564,13 @@
                 applyBtn.title = "Применить выбранные фильтры";
             }
         });
+        
+        // Функция для выбора всех листов
+        function selectAllSheets() {
+            if (typeof window.selectAllSheets === 'function') {
+                window.selectAllSheets();
+            }
+        }
     </script>
 </body>
 </html>
