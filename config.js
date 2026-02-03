@@ -1,7 +1,7 @@
 // Конфигурация приложения ADTS
 const CONFIG = {
     // ID вашей Google Таблицы - ВАШ АКТУАЛЬНЫЙ ID
-    SPREADSHEET_ID: 'ВАШ_ТЕКУЩИЙ_SPREADSHEET_ID',
+    SPREADSHEET_ID: '1BItr9-Q8qnN0S05sMh1YLMqCCfXuNm1E88dvpGkVNU0',
     
     // Настройки карты
     MAP: {
@@ -156,3 +156,4 @@ window.CONFIG = CONFIG;
 window.getConfig = getConfig;
 window.getColumnNames = getColumnNames;
 window.validateConfig = validateConfig;
+
