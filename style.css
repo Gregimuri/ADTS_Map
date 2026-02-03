@@ -69,11 +69,12 @@ body {
     align-items: center;
     gap: 15px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    transition: transform 0.3s;
+    transition: transform 0.3s, box-shadow 0.3s;
 }
 
 .stat-card:hover {
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
 }
 
 .stat-icon {
@@ -136,6 +137,7 @@ body {
 
 .btn-primary:hover {
     background: #2980b9;
+    transform: translateY(-2px);
 }
 
 .btn-secondary {
@@ -145,6 +147,7 @@ body {
 
 .btn-secondary:hover {
     background: #95a5a6;
+    transform: translateY(-2px);
 }
 
 .btn-warning {
@@ -154,6 +157,7 @@ body {
 
 .btn-warning:hover {
     background: #e67e22;
+    transform: translateY(-2px);
 }
 
 /* Фильтры */
@@ -182,6 +186,7 @@ body {
     margin-bottom: 5px;
     color: #95a5a6;
     font-size: 14px;
+    font-weight: 500;
 }
 
 .filter-select {
@@ -192,6 +197,13 @@ body {
     background: #34495e;
     color: white;
     font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .filter-select[multiple] {
@@ -203,6 +215,7 @@ body {
     padding: 8px;
     background: #34495e;
     border-bottom: 1px solid #4a6572;
+    transition: background 0.2s;
 }
 
 .filter-select option:hover {
@@ -212,6 +225,7 @@ body {
 .filter-select option:checked {
     background: #3498db;
     color: white;
+    font-weight: bold;
 }
 
 /* Информация о точке */
@@ -221,6 +235,7 @@ body {
     padding: 20px;
     border-radius: 10px;
     border-top: 3px solid #3498db;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
 }
 
 .point-info h4 {
@@ -265,6 +280,11 @@ body {
     font-size: 14px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     outline: none;
+    transition: box-shadow 0.3s;
+}
+
+.search-box input:focus {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
 
 .search-box button {
@@ -282,6 +302,7 @@ body {
 .search-box button:hover {
     background: #2980b9;
     transform: scale(1.05);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
 }
 
 /* Легенда */
@@ -321,6 +342,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: fadeIn 0.3s ease;
 }
 
 .modal-content {
@@ -330,6 +352,8 @@ body {
     max-width: 500px;
     width: 90%;
     text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    animation: slideIn 0.3s ease;
 }
 
 .modal-content h3 {
@@ -340,6 +364,7 @@ body {
 .modal-content p {
     margin-bottom: 20px;
     color: #ecf0f1;
+    line-height: 1.5;
 }
 
 /* Скроллбар */
@@ -363,11 +388,13 @@ body {
 
 /* Кастомные маркеры */
 .custom-marker {
-    transition: transform 0.3s;
+    transition: transform 0.3s, box-shadow 0.3s;
 }
 
 .custom-marker:hover {
-    transform: scale(1.1);
+    transform: scale(1.2);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.4);
+    z-index: 1000 !important;
 }
 
 /* Кластеры */
@@ -390,6 +417,298 @@ body {
 }
 .marker-cluster-large div {
     background-color: rgba(241, 128, 23, 0.6);
+}
+
+/* Анимации */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulse {
+    0% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideOutRight {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(100%); opacity: 0; }
+}
+
+/* Анимация загрузки */
+.loading {
+    animation: pulse 1.5s infinite;
+}
+
+/* Уведомления */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    animation: slideInRight 0.3s ease;
+    max-width: 400px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Улучшенные стили для списков */
+.option-with-color {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.option-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* Стили для быстрых фильтров */
+.quick-filter-btn {
+    width: 100%;
+    margin-bottom: 5px;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.quick-filter-btn:hover {
+    transform: translateX(3px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+}
+
+/* Стили для поиска в сайдбаре */
+.search-sidebar input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #4a6572;
+    border-radius: 6px;
+    background: #34495e;
+    color: white;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.search-sidebar input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.search-sidebar button {
+    padding: 10px 15px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.search-sidebar button:hover {
+    background: #2980b9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+/* Стили для статусов ADTS */
+.status-completed { background-color: #2ecc71; color: white; }
+.status-no-equipment { background-color: #e74c3c; color: white; }
+.status-queue { background-color: #3498db; color: white; }
+.status-primary { background-color: #f1c40f; color: #2c3e50; }
+.status-final { background-color: #9b59b6; color: white; }
+.status-rework { background-color: #95a5a6; color: white; }
+
+/* Специальные маркеры для разных статусов */
+.marker-completed {
+    background: #2ecc71 !important;
+    border-color: #27ae60 !important;
+}
+
+.marker-no-equipment {
+    background: #e74c3c !important;
+    border-color: #c0392b !important;
+}
+
+.marker-queue {
+    background: #3498db !important;
+    border-color: #2980b9 !important;
+}
+
+.marker-primary {
+    background: #f1c40f !important;
+    border-color: #f39c12 !important;
+    color: #2c3e50 !important;
+}
+
+.marker-final {
+    background: #9b59b6 !important;
+    border-color: #8e44ad !important;
+}
+
+.marker-rework {
+    background: #95a5a6 !important;
+    border-color: #7f8c8d !important;
+}
+
+/* Индикаторы в легенде */
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    transition: all 0.3s;
+}
+
+/* Панель быстрых фильтров по статусам */
+.quick-status-filters {
+    position: absolute;
+    top: 100px;
+    right: 20px;
+    z-index: 1000;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    max-width: 250px;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.quick-status-filter {
+    width: 100%;
+    margin-bottom: 8px;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.quick-status-filter:hover {
+    transform: translateX(5px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
+}
+
+.quick-status-filter i {
+    font-size: 14px;
+}
+
+/* Улучшенная панель информации о точке */
+.point-details-status {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Круговые диаграммы для статистики */
+.stat-chart {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    position: relative;
+    background: conic-gradient(
+        var(--color-1) 0% var(--percent-1),
+        var(--color-2) 0% var(--percent-2),
+        var(--color-3) 0% var(--percent-3),
+        var(--color-4) 0% var(--percent-4),
+        var(--color-5) 0% var(--percent-5),
+        #e0e0e0 0%
+    );
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+/* Тултипы */
+.tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 200px;
+    background-color: #2c3e50;
+    color: white;
+    text-align: center;
+    border-radius: 6px;
+    padding: 8px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* Стили для загрузчика */
+.loader {
+    border: 3px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    border-top: 3px solid #3498db;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Стили для подсказок */
+.hint {
+    font-size: 12px;
+    color: #95a5a6;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
 /* Адаптивность */
@@ -465,193 +784,12 @@ body {
         margin: 0 10px 15px;
         padding: 15px;
     }
-}
-
-/* Анимация загрузки */
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
-}
-
-.loading {
-    animation: pulse 1.5s infinite;
-}
-
-/* Улучшенные стили для списков */
-.option-with-color {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.option-color {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    display: inline-block;
-}
-
-/* Стили для быстрых фильтров */
-.quick-filter-btn {
-    width: 100%;
-    margin-bottom: 5px;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.quick-filter-btn:hover {
-    transform: translateX(3px);
-}
-
-/* Стили для поиска в сайдбаре */
-.search-sidebar input {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #4a6572;
-    border-radius: 6px;
-    background: #34495e;
-    color: white;
-    font-size: 14px;
-}
-
-.search-sidebar input:focus {
-    outline: none;
-    border-color: #3498db;
-}
-
-.search-sidebar button {
-    padding: 10px 15px;
-    background: #3498db;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-.search-sidebar button:hover {
-    background: #2980b9;
-}
-
-/* Стили для статусов ADTS */
-.status-completed { background-color: #2ecc71; color: white; }
-.status-no-equipment { background-color: #e74c3c; color: white; }
-.status-queue { background-color: #3498db; color: white; }
-.status-primary { background-color: #f1c40f; color: #2c3e50; }
-.status-final { background-color: #9b59b6; color: white; }
-.status-rework { background-color: #95a5a6; color: white; }
-
-/* Специальные маркеры для разных статусов */
-.marker-completed {
-    background: #2ecc71 !important;
-    border-color: #27ae60 !important;
-}
-
-.marker-no-equipment {
-    background: #e74c3c !important;
-    border-color: #c0392b !important;
-}
-
-.marker-queue {
-    background: #3498db !important;
-    border-color: #2980b9 !important;
-}
-
-.marker-primary {
-    background: #f1c40f !important;
-    border-color: #f39c12 !important;
-    color: #2c3e50 !important;
-}
-
-.marker-final {
-    background: #9b59b6 !important;
-    border-color: #8e44ad !important;
-}
-
-.marker-rework {
-    background: #95a5a6 !important;
-    border-color: #7f8c8d !important;
-}
-
-/* Индикаторы в легенде */
-.status-indicator {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    display: inline-block;
-    margin-right: 8px;
-    border: 2px solid white;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-/* Панель быстрых фильтров по статусам */
-.quick-status-filters {
-    position: absolute;
-    top: 100px;
-    right: 20px;
-    z-index: 1000;
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    max-width: 250px;
-}
-
-.quick-status-filter {
-    width: 100%;
-    margin-bottom: 8px;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.quick-status-filter:hover {
-    transform: translateX(5px);
-    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
-}
-
-.quick-status-filter i {
-    font-size: 14px;
-}
-
-/* Улучшенная панель информации о точке */
-.point-details-status {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
-}
-
-/* Круговые диаграммы для статистики */
-.stat-chart {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    position: relative;
-    background: conic-gradient(
-        var(--color-1) 0% var(--percent-1),
-        var(--color-2) 0% var(--percent-2),
-        var(--color-3) 0% var(--percent-3),
-        var(--color-4) 0% var(--percent-4),
-        var(--color-5) 0% var(--percent-5),
-        #e0e0e0 0%
-    );
+    
+    .header h1 {
+        font-size: 20px;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+    }
 }
