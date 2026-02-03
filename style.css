@@ -718,3 +718,34 @@ body {
         font-size: 24px;
     }
 }
+
+/* Стили для фильтра листов */
+.sheets-filter-info {
+    font-size: 11px;
+    color: #3498db;
+    margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.sheets-filter-info i {
+    font-size: 10px;
+}
+
+/* Стили для селектора листов в попапе */
+.sheet-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #3498db20;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    color: #3498db;
+    margin-top: 5px;
+}
+
+.sheet-info i {
+    font-size: 10px;
+}
