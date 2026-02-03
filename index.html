@@ -15,26 +15,6 @@
     
     <!-- Стили -->
     <link rel="stylesheet" href="style.css">
-    
-    <style>
-        /* Дополнительные стили для анимаций */
-        .legend-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            padding: 8px 10px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .legend-item:hover {
-            background: rgba(255,255,255,0.2);
-            transform: translateX(5px);
-        }
-    </style>
 </head>
 <body>
     <div class="container">
@@ -45,10 +25,6 @@
                 <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ ADTS</h1>
                 <div class="status" id="status">
                     <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
-                </div>
-                <div class="hint" style="margin-top: 8px;">
-                    <i class="fas fa-info-circle"></i>
-                    <span>Система мониторинга точек ADTS</span>
                 </div>
             </div>
             
@@ -61,10 +37,6 @@
                     <div class="stat-info">
                         <div class="stat-value" id="total-points">0</div>
                         <div class="stat-label">Всего точек</div>
-                        <div class="filter-hint">
-                            <i class="fas fa-filter" style="font-size: 10px;"></i>
-                            <span id="total-hint">Загружается...</span>
-                        </div>
                     </div>
                 </div>
                 
@@ -75,29 +47,6 @@
                     <div class="stat-info">
                         <div class="stat-value" id="shown-points">0</div>
                         <div class="stat-label">Показано</div>
-                        <div class="hint" id="shown-percentage">0%</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: #f39c12;">
-                        <i class="fas fa-bullseye"></i>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value" id="accuracy-stats">-</div>
-                        <div class="stat-label">Точность</div>
-                        <div class="hint" id="accuracy-hint">Точные/Приблизительные</div>
-                    </div>
-                </div>
-                
-                <div class="stat-card">
-                    <div class="stat-icon" style="background: #9b59b6;">
-                        <i class="fas fa-chart-pie"></i>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value" id="last-update">-:-</div>
-                        <div class="stat-label">Обновлено</div>
-                        <div class="hint" id="update-timer">--:--</div>
                     </div>
                 </div>
             </div>
@@ -105,41 +54,33 @@
             <!-- Управление -->
             <div class="controls">
                 <button class="btn btn-primary" onclick="loadData()" id="refresh-btn">
-                    <i class="fas fa-sync-alt"></i> Обновить данные
+                    <i class="fas fa-sync-alt"></i> Обновить
                 </button>
                 <button class="btn btn-secondary" onclick="clearFilters()">
-                    <i class="fas fa-filter"></i> Сбросить фильтры
+                    <i class="fas fa-filter"></i> Сбросить
                 </button>
             </div>
             
             <!-- Поиск -->
             <div class="search-sidebar" style="padding: 0 20px 15px;">
-                <div style="display: flex; gap: 5px;">
-                    <input type="text" id="search-sidebar" placeholder="Поиск по названию, адресу, региону..." 
-                           style="flex: 1; padding: 10px; border: 1px solid #4a6572; border-radius: 6px; background: #34495e; color: white;">
-                    <button onclick="searchPointsSidebar()" style="padding: 10px 15px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer;">
-                        <i class="fas fa-search"></i>
-                    </button>
-                </div>
-                <div class="hint" style="margin-top: 5px;">
-                    <i class="fas fa-lightbulb"></i>
-                    <span>Используйте Ctrl+клик для множественного выбора</span>
-                </div>
+                <input type="text" id="search-sidebar" placeholder="Поиск по всем полям..." 
+                       style="width: 100%; padding: 10px; border: 1px solid #4a6572; border-radius: 6px; background: #34495e; color: white;">
             </div>
             
             <!-- Фильтры -->
             <div class="filters">
                 <h3><i class="fas fa-filter"></i> Фильтры</h3>
                 
-                <!-- Фильтр: Листы -->
+                <!-- Листы -->
                 <div class="filter-group">
-                    <label for="filter-sheets">Листы (проекты):</label>
+                    <label for="filter-sheets">Листы:</label>
                     <select id="filter-sheets" multiple class="filter-select">
                         <option value="">Все листы</option>
                     </select>
                     <div class="filter-hint" id="sheets-count">0 листов</div>
                 </div>
                 
+                <!-- Проекты -->
                 <div class="filter-group">
                     <label for="filter-project">Проект:</label>
                     <select id="filter-project" multiple class="filter-select">
@@ -148,38 +89,18 @@
                     <div class="filter-hint" id="project-count">0 проектов</div>
                 </div>
                 
+                <!-- Статусы -->
                 <div class="filter-group">
-                    <label for="filter-region">Регион:</label>
-                    <select id="filter-region" multiple class="filter-select">
-                        <option value="">Все регионов</option>
-                    </select>
-                    <div class="filter-hint" id="region-count">0 регионов</div>
-                </div>
-                
-                <div class="filter-group">
-                    <label for="filter-status">Статус монтажа:</label>
+                    <label for="filter-status">Статус:</label>
                     <select id="filter-status" multiple class="filter-select">
                         <option value="">Все статусы</option>
                     </select>
                     <div class="filter-hint" id="status-count">0 статусов</div>
                 </div>
                 
-                <div class="filter-group">
-                    <label for="filter-manager">Менеджер:</label>
-                    <select id="filter-manager" multiple class="filter-select">
-                        <option value="">Все менеджеры</option>
-                    </select>
-                    <div class="filter-hint" id="manager-count">0 менеджеров</div>
-                </div>
-                
-                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button class="btn btn-primary" onclick="applyFilters()" style="flex: 1;" id="apply-filters-btn">
-                        <i class="fas fa-check"></i> Применить
-                    </button>
-                    <button class="btn btn-secondary" onclick="clearFilters()" style="flex: 1;">
-                        <i class="fas fa-times"></i> Сбросить
-                    </button>
-                </div>
+                <button class="btn btn-primary" onclick="applyFilters()" style="width: 100%; margin-top: 15px;">
+                    <i class="fas fa-check"></i> Применить фильтры
+                </button>
             </div>
             
             <!-- Информация о точке -->
@@ -187,62 +108,11 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
                     <button onclick="document.getElementById('point-info').style.display='none'" 
-                            style="background: none; border: none; color: #95a5a6; cursor: pointer; font-size: 16px;">
+                            style="background: none; border: none; color: #95a5a6; cursor: pointer;">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
                 <div id="point-details"></div>
-            </div>
-            
-            <!-- Легенда статусов ADTS -->
-            <div class="legend-mini" style="padding: 15px; background: rgba(0,0,0,0.1); margin: 20px; border-radius: 8px;">
-                <h5 style="color: white; margin-bottom: 15px; font-size: 14px;">
-                    <i class="fas fa-palette"></i> Цвета статусов ADTS
-                </h5>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #2ecc71;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Выполнен</span>
-                        </div>
-                        <span id="count-completed" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #e74c3c;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Нет оборудования</span>
-                        </div>
-                        <span id="count-no-equipment" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #3498db;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">В очереди</span>
-                        </div>
-                        <span id="count-queue" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #f1c40f;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Первичный</span>
-                        </div>
-                        <span id="count-primary" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #9b59b6;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Финальный</span>
-                        </div>
-                        <span id="count-final" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #95a5a6;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Доработка</span>
-                        </div>
-                        <span id="count-rework" class="legend-count">0</span>
-                    </div>
-                </div>
             </div>
         </div>
         
@@ -252,19 +122,19 @@
             
             <!-- Поиск на карте -->
             <div class="search-box">
-                <input type="text" id="search" placeholder="Поиск по названию, адресу, региону...">
+                <input type="text" id="search" placeholder="Поиск...">
                 <button onclick="searchPoints()">
                     <i class="fas fa-search"></i>
                 </button>
             </div>
             
-            <!-- Легенда статусов -->
+            <!-- Легенда -->
             <div class="legend">
                 <div id="legend"></div>
             </div>
             
-            <!-- Кнопка централизации карты -->
-            <button onclick="centerMap()" style="position: absolute; bottom: 80px; right: 20px; z-index: 1000; background: white; color: #2c3e50; border: none; width: 40px; height: 40px; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+            <!-- Кнопка центрирования -->
+            <button onclick="centerMap()" style="position: absolute; bottom: 80px; right: 20px; z-index: 1000; background: white; color: #2c3e50; border: none; width: 40px; height: 40px; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.2); cursor: pointer; display: flex; align-items: center; justify-content: center;">
                 <i class="fas fa-crosshairs"></i>
             </button>
         </div>
