@@ -133,3 +133,4 @@ document.addEventListener('DOMContentLoaded', function() {
 window.CONFIG = CONFIG;
 window.getConfig = getConfig;
 window.validateConfig = validateConfig;
+
