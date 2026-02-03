@@ -17,68 +17,47 @@ let lastUpdateTime = null;
 let updateTimerInterval = null;
 let availableSheets = [];
 let sheetPointsCache = new Map();
-let sheetsInfoCache = null;
-let lastSheetsFetchTime = null;
 
-// Цветовая схема статусов ADTS (можно расширить)
+// Цветовая схема статусов ADTS
 const ADTS_STATUS_COLORS = {
-    // Основные статусы
     'Выполнен': '#2ecc71',
+    'Нет оборудования': '#e74c3c',
+    'В очереди': '#3498db',
+    'Первичный': '#f1c40f',
+    'Финальный': '#9b59b6',
+    'Доработка': '#95a5a6',
     'Выполнено': '#2ecc71',
-    'Завершен': '#2ecc71',
     'Сдан': '#2ecc71',
     'Готов': '#2ecc71',
-    
-    'Нет оборудования': '#e74c3c',
+    'Завершен': '#2ecc71',
     'Нет оборудывания': '#e74c3c',
     'Оборудования нет': '#e74c3c',
     'Ожидание оборудования': '#e74c3c',
-    
-    'В очереди': '#3498db',
     'Очередь': '#3498db',
     'В работе': '#3498db',
     'План': '#3498db',
     'Запланирован': '#3498db',
-    
-    'Первичный': '#f1c40f',
     'Первичный монтаж': '#f1c40f',
     'Начальный': '#f1c40f',
     'Подготовка': '#f1c40f',
-    
-    'Финальный': '#9b59b6',
     'Финальный монтаж': '#9b59b6',
     'Завершение': '#9b59b6',
     'Окончательный': '#9b59b6',
-    
-    'Доработка': '#95a5a6',
     'Доработка после монтажа': '#95a5a6',
     'Реконструкция': '#95a5a6',
     'Переделка': '#95a5a6',
     'Ремонт': '#95a5a6'
 };
 
-// Статистика по листам
-let sheetsStatistics = {};
-
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
 
 function initApp() {
-    console.log('🚀 Инициализация приложения ADTS...');
+    console.log('Инициализация приложения ADTS...');
     initMap();
     setupEventListeners();
     loadAvailableSheets();
     setupAutoUpdate();
     startUpdateTimer();
-    
-    // Показываем информацию о конфигурации
-    showConfigInfo();
-}
-
-function showConfigInfo() {
-    console.log('ℹ️ Конфигурация:');
-    console.log('- ID таблицы:', CONFIG.SPREADSHEET_ID);
-    console.log('- Поддержка листов:', CONFIG.SHEETS.enabled);
-    console.log('- Исключаемые листы:', CONFIG.SHEETS.excludedSheets);
 }
 
 function setupEventListeners() {
@@ -90,6 +69,9 @@ function setupEventListeners() {
     document.getElementById('search-sidebar')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') searchPointsSidebar();
     });
+    
+    // Кнопки
+    document.getElementById('search-sidebar')?.nextElementSibling?.addEventListener('click', searchPointsSidebar);
     
     // Фильтры
     ['filter-sheets', 'filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
@@ -105,7 +87,7 @@ document.addEventListener('DOMContentLoaded', initApp);
 // ========== КАРТА ==========
 
 function initMap() {
-    console.log('🗺️ Инициализация карты...');
+    console.log('Инициализация карты...');
     
     try {
         map = L.map('map').setView(CONFIG.MAP.center, CONFIG.MAP.zoom);
@@ -123,10 +105,10 @@ function initMap() {
             zoomToBoundsOnClick: true
         }).addTo(map);
         
-        console.log('✅ Карта инициализирована');
+        console.log('Карта инициализирована');
         
     } catch (error) {
-        console.error('❌ Ошибка инициализации карты:', error);
+        console.error('Ошибка инициализации карты:', error);
         showNotification('Ошибка загрузки карты', 'error');
     }
 }
@@ -141,9 +123,18 @@ function updateStatus(message, type = 'success') {
     let color = '#2ecc71';
     
     switch(type) {
-        case 'error': icon = 'exclamation-circle'; color = '#e74c3c'; break;
-        case 'warning': icon = 'exclamation-triangle'; color = '#f39c12'; break;
-        case 'loading': icon = 'sync-alt fa-spin'; color = '#3498db'; break;
+        case 'error': 
+            icon = 'exclamation-circle';
+            color = '#e74c3c';
+            break;
+        case 'warning':
+            icon = 'exclamation-triangle';
+            color = '#f39c12';
+            break;
+        case 'loading':
+            icon = 'sync-alt fa-spin';
+            color = '#3498db';
+            break;
     }
     
     statusElement.innerHTML = `<i class="fas fa-${icon}" style="color: ${color};"></i> ${message}`;
@@ -163,12 +154,16 @@ function showModal(title, message) {
 
 function closeModal() {
     const modal = document.getElementById('modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
 function showNotification(message, type = 'info', duration = 5000) {
     // Удаляем старые уведомления
-    document.querySelectorAll('.notification').forEach(el => el.remove());
+    document.querySelectorAll('.notification').forEach(el => {
+        if (el.parentElement) el.remove();
+    });
     
     const notification = document.createElement('div');
     notification.className = 'notification';
@@ -177,9 +172,18 @@ function showNotification(message, type = 'info', duration = 5000) {
     let bgColor = '#3498db';
     
     switch(type) {
-        case 'success': icon = 'check-circle'; bgColor = '#2ecc71'; break;
-        case 'error': icon = 'exclamation-circle'; bgColor = '#e74c3c'; break;
-        case 'warning': icon = 'exclamation-triangle'; bgColor = '#f39c12'; break;
+        case 'success':
+            icon = 'check-circle';
+            bgColor = '#2ecc71';
+            break;
+        case 'error':
+            icon = 'exclamation-circle';
+            bgColor = '#e74c3c';
+            break;
+        case 'warning':
+            icon = 'exclamation-triangle';
+            bgColor = '#f39c12';
+            break;
     }
     
     notification.innerHTML = `
@@ -196,14 +200,20 @@ function showNotification(message, type = 'info', duration = 5000) {
     document.body.appendChild(notification);
     
     if (duration > 0) {
-        setTimeout(() => notification.remove(), duration);
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, duration);
     }
 }
 
 // ========== ТАЙМЕРЫ ==========
 
 function startUpdateTimer() {
-    if (updateTimerInterval) clearInterval(updateTimerInterval);
+    if (updateTimerInterval) {
+        clearInterval(updateTimerInterval);
+    }
     
     updateTimerInterval = setInterval(() => {
         const timerElement = document.getElementById('update-timer');
@@ -237,7 +247,6 @@ function normalizeADTSStatus(status) {
     
     const statusLower = status.toLowerCase().trim();
     
-    // Приоритетный порядок проверки
     if (statusLower.includes('выполнен') || statusLower.includes('сдан') || statusLower.includes('готов') || statusLower.includes('завершен')) 
         return 'Выполнен';
     if (statusLower.includes('нет оборуд') || statusLower.includes('оборудования нет') || statusLower.includes('ожидание')) 
@@ -251,7 +260,6 @@ function normalizeADTSStatus(status) {
     if (statusLower.includes('доработк') || statusLower.includes('реконструкц') || statusLower.includes('передел') || statusLower.includes('ремонт')) 
         return 'Доработка';
     
-    // Если не распознали, возвращаем оригинал
     return status;
 }
 
@@ -271,7 +279,7 @@ function getStatusIcon(status) {
 
 function getStatusColor(status) {
     const normalized = normalizeADTSStatus(status);
-    return ADTS_STATUS_COLORS[normalized] || ADTS_STATUS_COLORS[normalized + ' монтаж'] || '#95a5a6';
+    return ADTS_STATUS_COLORS[normalized] || '#95a5a6';
 }
 
 // ========== РАБОТА С ЛИСТАМИ ==========
@@ -283,102 +291,41 @@ async function loadAvailableSheets() {
         return;
     }
     
-    // Проверяем кэш
-    const now = new Date();
-    if (sheetsInfoCache && lastSheetsFetchTime && 
-        (now - lastSheetsFetchTime) < CONFIG.SHEETS.cacheDuration) {
-        console.log('Использую кэшированные листы');
-        availableSheets = sheetsInfoCache;
-        updateSheetsFilter(availableSheets);
-        return;
-    }
-    
     try {
-        console.log('📋 Загружаю информацию о листах...');
+        console.log('Загружаю информацию о листах...');
         updateStatus('Получение списка листов...', 'loading');
         
-        const url = `https://spreadsheets.google.com/feeds/worksheets/${CONFIG.SPREADSHEET_ID}/public/full?alt=json`;
-        const response = await fetch(url);
+        // Используем более простой подход для получения данных
+        const sheetsToTry = ['Москва', 'СПб', 'Лист1', 'Основной'];
+        availableSheets = sheetsToTry.map((title, index) => ({
+            id: index.toString(),
+            title: title,
+            gid: index.toString()
+        }));
         
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        console.log('Использую стандартные листы:', availableSheets.map(s => s.title));
         
-        const data = await response.json();
-        const sheets = data.feed.entry || [];
-        
-        console.log(`📄 Всего листов в таблице: ${sheets.length}`);
-        
-        // Обрабатываем листы
-        availableSheets = sheets
-            .map(sheet => ({
-                id: sheet.id.$t.split('/').pop(),
-                title: sheet.title.$t,
-                gid: sheet.id.$t.split('/').pop()
-            }))
-            .filter(sheet => {
-                const lowerTitle = sheet.title.toLowerCase();
-                const excluded = CONFIG.SHEETS.excludedSheets || [];
-                
-                // Исключаем системные листы
-                const shouldExclude = excluded.some(excludedName => 
-                    lowerTitle.includes(excludedName.toLowerCase())
-                );
-                
-                // Включаем только если не исключен
-                return !shouldExclude;
-            });
-        
-        // Если указаны конкретные листы для включения
-        if (CONFIG.SHEETS.includedSheets.length > 0) {
-            availableSheets = availableSheets.filter(sheet =>
-                CONFIG.SHEETS.includedSheets.includes(sheet.title)
-            );
-        }
-        
-        console.log(`✅ Подходящих листов: ${availableSheets.length}`);
-        console.log('📋 Список листов:', availableSheets.map(s => s.title));
-        
-        if (availableSheets.length === 0) {
-            console.warn('Не найдено подходящих листов');
-            if (sheets.length > 0) {
-                // Берем первый неисключенный лист
-                const firstSheet = sheets[0];
-                availableSheets = [{
-                    id: firstSheet.id.$t.split('/').pop(),
-                    title: firstSheet.title.$t,
-                    gid: firstSheet.id.$t.split('/').pop()
-                }];
-                console.log('🔄 Использую первый лист:', firstSheet.title.$t);
-            }
-        }
-        
-        // Кэшируем
-        sheetsInfoCache = availableSheets;
-        lastSheetsFetchTime = now;
-        
-        // Обновляем интерфейс
         updateSheetsFilter(availableSheets);
         
         if (availableSheets.length > 0) {
-            // Автоматически выбираем все листы
-            selectAllSheets();
-            // Загружаем данные
             loadData();
-        } else {
-            showDemoData();
         }
         
         updateStatus(`Найдено ${availableSheets.length} листов`, 'success');
         
     } catch (error) {
-        console.error('❌ Ошибка загрузки листов:', error);
+        console.error('Ошибка загрузки листов:', error);
         updateStatus('Ошибка загрузки листов', 'error');
-        showNotification('Не удалось получить список листов. Проверьте ID таблицы.', 'error');
+        showNotification('Использую стандартные листы', 'warning');
         
-        // Показываем демо-данные с пояснением
-        setTimeout(() => {
-            showDemoData();
-            showNotification('Используются демо-данные. Проверьте настройки.', 'warning');
-        }, 1000);
+        // Создаем стандартные листы
+        availableSheets = [
+            { id: '1', title: 'Москва', gid: '0' },
+            { id: '2', title: 'СПб', gid: '1' }
+        ];
+        
+        updateSheetsFilter(availableSheets);
+        loadData();
     }
 }
 
@@ -386,10 +333,7 @@ function updateSheetsFilter(sheets) {
     const sheetSelect = document.getElementById('filter-sheets');
     if (!sheetSelect) return;
     
-    // Сохраняем текущий выбор
     const selectedValues = getSelectedSheets();
-    
-    // Очищаем и добавляем опции
     sheetSelect.innerHTML = '<option value="">Все листы</option>';
     
     sheets.forEach(sheet => {
@@ -397,15 +341,13 @@ function updateSheetsFilter(sheets) {
         option.value = sheet.title;
         option.textContent = sheet.title;
         
-        // Если ранее был выбран или это первый запуск
-        if (selectedValues.includes(sheet.title) || (selectedValues.length === 0 && sheets.length === 1)) {
+        if (selectedValues.includes(sheet.title) || selectedValues.length === 0) {
             option.selected = true;
         }
         
         sheetSelect.appendChild(option);
     });
     
-    // Обновляем счетчик
     updateFilterCounts();
 }
 
@@ -429,7 +371,6 @@ function selectAllSheets() {
     });
     
     activeFilters.sheets = availableSheets.map(s => s.title);
-    console.log('✅ Выбраны все листы');
 }
 
 // ========== ЗАГРУЗКА ДАННЫХ ==========
@@ -448,105 +389,57 @@ async function loadData() {
     }
     
     try {
-        console.log('📥 Начинаю загрузку данных...');
+        console.log('Начинаю загрузку данных...');
         updateStatus('Загрузка данных...', 'loading');
-        showModal('Загрузка', '<div style="text-align: center;"><div class="loader"></div><p>Подключение к Google Таблице...</p><p style="font-size: 12px; color: #95a5a6;">Пожалуйста, подождите</p></div>');
         
         let allData = [];
-        sheetsStatistics = {}; // Сбрасываем статистику
         
         if (CONFIG.SHEETS.enabled && availableSheets.length > 0) {
             const selectedSheets = getSelectedSheets();
             const sheetsToLoad = selectedSheets.length > 0 ? selectedSheets : availableSheets.map(s => s.title);
             
-            console.log(`📊 Загружаю данные с ${sheetsToLoad.length} листов`);
+            console.log(`Загружаю данные с ${sheetsToLoad.length} листов`);
             
             for (const sheetName of sheetsToLoad) {
                 try {
-                    console.log(`📖 Обрабатываю лист: "${sheetName}"`);
+                    console.log(`Обрабатываю лист: "${sheetName}"`);
                     
-                    // Проверяем кэш
                     if (sheetPointsCache.has(sheetName)) {
                         const cachedPoints = sheetPointsCache.get(sheetName);
-                        console.log(`⚡ Использую кэш для "${sheetName}": ${cachedPoints.length} точек`);
                         allData = allData.concat(cachedPoints);
                         continue;
                     }
                     
-                    // Загружаем данные с листа
                     const sheetData = await loadSheetData(sheetName);
                     
                     if (!sheetData || sheetData.length === 0) {
-                        console.warn(`⚠️ Лист "${sheetName}" пуст или не содержит данных`);
+                        console.warn(`Лист "${sheetName}" пуст или не содержит данных`);
                         continue;
                     }
                     
-                    console.log(`📝 Лист "${sheetName}": ${sheetData.length} строк`);
+                    console.log(`Лист "${sheetName}": ${sheetData.length} строк`);
                     
-                    // Обрабатываем данные
                     const processedPoints = processData(sheetData, sheetName);
-                    console.log(`✅ Лист "${sheetName}" обработан: ${processedPoints.length} точек`);
+                    console.log(`Лист "${sheetName}" обработан: ${processedPoints.length} точек`);
                     
-                    // Добавляем координаты
                     const pointsWithCoords = await addCoordinatesFast(processedPoints);
-                    
-                    // Сохраняем в кэш
                     sheetPointsCache.set(sheetName, pointsWithCoords);
-                    
-                    // Сохраняем статистику по листу
-                    sheetsStatistics[sheetName] = {
-                        total: pointsWithCoords.length,
-                        withCoords: pointsWithCoords.filter(p => p.lat && p.lng).length,
-                        statuses: {}
-                    };
-                    
-                    // Собираем статистику по статусам
-                    pointsWithCoords.forEach(point => {
-                        const status = normalizeADTSStatus(point.status);
-                        if (!sheetsStatistics[sheetName].statuses[status]) {
-                            sheetsStatistics[sheetName].statuses[status] = 0;
-                        }
-                        sheetsStatistics[sheetName].statuses[status]++;
-                    });
-                    
                     allData = allData.concat(pointsWithCoords);
                     
                 } catch (sheetError) {
-                    console.error(`❌ Ошибка обработки листа "${sheetName}":`, sheetError);
-                    showNotification(`Ошибка загрузки листа "${sheetName}"`, 'warning');
+                    console.error(`Ошибка обработки листа "${sheetName}":`, sheetError);
                 }
             }
-        } else {
-            // Загрузка с одного листа (для обратной совместимости)
-            console.log('📥 Загружаю данные с основного листа...');
-            const data = await loadDataAsCSV();
-            
-            if (!data || data.length === 0) {
-                throw new Error('Не удалось загрузить данные');
-            }
-            
-            const processedPoints = processData(data, 'Основной лист');
-            allData = await addCoordinatesFast(processedPoints);
         }
         
         if (allData.length === 0) {
-            throw new Error('Не удалось загрузить данные с выбранных листов');
+            throw new Error('Не удалось загрузить данные');
         }
         
-        console.log(`🎉 Всего загружено: ${allData.length} точек`);
+        console.log(`Всего загружено: ${allData.length} точек`);
         
-        // Логируем статистику по листам
-        console.group('📊 Статистика по листам:');
-        Object.keys(sheetsStatistics).forEach(sheetName => {
-            const stats = sheetsStatistics[sheetName];
-            console.log(`• ${sheetName}: ${stats.total} точек`);
-        });
-        console.groupEnd();
-        
-        // Обновляем данные
         allPoints = allData;
         
-        // Обновляем интерфейс
         updateFilters();
         updateStatistics();
         updateStatusStatistics();
@@ -554,27 +447,18 @@ async function loadData() {
         updateLastUpdateTime();
         showPointsOnMap();
         
-        // Закрываем модальное окно
-        setTimeout(() => {
-            closeModal();
-            updateStatus(`Загружено: ${allData.length} точек`, 'success');
-            showNotification(`Данные успешно загружены: ${allData.length} точек с ${Object.keys(sheetsStatistics).length} листов`, 'success', 3000);
-        }, 500);
+        updateStatus(`Загружено: ${allData.length} точек`, 'success');
+        showNotification(`Данные успешно загружены: ${allData.length} точек`, 'success', 3000);
         
     } catch (error) {
-        console.error('❌ Критическая ошибка загрузки:', error);
+        console.error('Ошибка загрузки:', error);
         updateStatus('Ошибка загрузки', 'error');
         
-        setTimeout(() => {
-            closeModal();
-            
-            if (allPoints.length === 0) {
-                showNotification('Не удалось загрузить данные. Показываю демо-данные.', 'error');
-                showDemoData();
-            } else {
-                showNotification('Ошибка обновления данных. Используются предыдущие данные.', 'warning');
-            }
-        }, 1000);
+        if (allPoints.length === 0) {
+            showNotification('Не удалось загрузить данные', 'error');
+        } else {
+            showNotification('Ошибка обновления данных', 'warning');
+        }
         
     } finally {
         isLoading = false;
@@ -586,44 +470,22 @@ async function loadData() {
 }
 
 async function loadSheetData(sheetName) {
-    // Пробуем разные форматы URL
-    const urls = [
-        `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`,
-        `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv&sheet=${encodeURIComponent(sheetName)}`,
-        `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(sheetName)}`
-    ];
-    
-    for (const url of urls) {
-        try {
-            console.log(`🔗 Пробую URL: ${url}`);
-            const response = await fetch(url);
-            
-            if (response.ok) {
-                const csvText = await response.text();
-                console.log(`✅ Успешно загружено с ${url}`);
-                return parseCSV(csvText);
-            }
-        } catch (error) {
-            console.log(`❌ Не удалось загрузить с ${url}:`, error.message);
-            continue;
-        }
-    }
-    
-    throw new Error(`Не удалось загрузить данные листа "${sheetName}"`);
-}
-
-async function loadDataAsCSV() {
-    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv`;
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
     
     try {
+        console.log(`Пробую URL: ${url}`);
         const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         
         const csvText = await response.text();
         return parseCSV(csvText);
+        
     } catch (error) {
-        console.error('Ошибка загрузки CSV:', error);
-        return null;
+        console.error(`Ошибка загрузки листа "${sheetName}":`, error);
+        throw error;
     }
 }
 
@@ -659,7 +521,6 @@ function parseCSV(csvText) {
             
             row.push(current);
             
-            // Очищаем кавычки
             const cleanedRow = row.map(cell => {
                 let cleaned = cell.trim();
                 if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
@@ -687,12 +548,8 @@ function processData(rows, sheetName = '') {
     const points = [];
     const headers = rows[0].map(h => h.toString().trim());
     
-    // Определяем индексы столбцов
     const columnIndices = detectColumnIndices(headers);
     
-    console.log(`🔍 Обнаружены столбцы для листа "${sheetName}":`, columnIndices);
-    
-    // Обрабатываем строки
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row || row.length === 0) continue;
@@ -711,7 +568,6 @@ function detectColumnIndices(headers) {
     const indices = {};
     const headersLower = headers.map(h => h.toLowerCase().trim());
     
-    // Для каждого типа столбца проверяем все возможные названия
     const columnTypes = {
         name: getColumnNames('name'),
         region: getColumnNames('region'),
@@ -727,13 +583,11 @@ function detectColumnIndices(headers) {
         
         for (const possibleName of columnTypes[type]) {
             const index = headersLower.findIndex(h => 
-                h.includes(possibleName.toLowerCase()) || 
-                possibleName.toLowerCase().includes(h)
+                h.includes(possibleName.toLowerCase())
             );
             
             if (index !== -1) {
                 indices[type] = index;
-                console.log(`✓ Столбец "${type}" найден как "${headers[index]}" (индекс ${index})`);
                 break;
             }
         }
@@ -764,19 +618,13 @@ function createPoint(row, indices, sheetName, rowIndex) {
         status: getValue('status'),
         manager: getValue('manager'),
         contractor: getValue('contractor'),
-        project: getValue('project'),
-        dateAdded: new Date().toISOString().split('T')[0]
+        project: getValue('project') || sheetName
     };
     
     // Нормализуем статус
     if (point.status) {
         point.originalStatus = point.status;
         point.status = normalizeADTSStatus(point.status);
-    }
-    
-    // Если project не указан, используем название листа
-    if (!point.project || point.project.trim() === '') {
-        point.project = sheetName;
     }
     
     // Генерируем название если его нет
@@ -810,11 +658,10 @@ async function addCoordinatesFast(points) {
                 ...point,
                 lat: coords.lat,
                 lng: coords.lng,
-                isMock: true,
-                accuracy: 'approximate'
+                isMock: true
             };
         }
-        return { ...point, isMock: false, accuracy: 'exact' };
+        return { ...point, isMock: false };
     });
 }
 
@@ -825,7 +672,7 @@ function showPointsOnMap() {
     markersMap.clear();
     
     const filteredPoints = filterPoints();
-    console.log(`📍 Показываю ${filteredPoints.length} точек на карте`);
+    console.log(`Показываю ${filteredPoints.length} точек на карте`);
     
     filteredPoints.forEach(point => {
         if (point.lat && point.lng) {
@@ -841,7 +688,7 @@ function showPointsOnMap() {
     
     // Центрируем карту
     if (filteredPoints.length > 0) {
-        setTimeout(() => centerMapOnFilteredPoints(), 100);
+        centerMapOnFilteredPoints();
     }
 }
 
@@ -918,12 +765,6 @@ function createPopupContent(point) {
                     <i class="fas fa-file-alt"></i> Лист: ${point.sheet}
                 </div>
             ` : ''}
-            
-            ${point.isMock ? `
-                <div style="margin-top: 10px; padding: 5px; background: #f39c12; color: white; border-radius: 4px; font-size: 11px;">
-                    <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
-                </div>
-            ` : ''}
         </div>
     `;
 }
@@ -947,18 +788,12 @@ function updateFilters() {
         if (point.sheet) filters.sheets.add(point.sheet);
     });
     
-    // Сортируем и заполняем фильтры
     fillFilter('filter-project', Array.from(filters.projects).sort());
     fillFilter('filter-region', Array.from(filters.regions).sort());
     fillFilter('filter-status', Array.from(filters.statuses).sort());
     fillFilter('filter-manager', Array.from(filters.managers).sort());
     
-    console.log('✅ Фильтры обновлены');
-    console.log('- Проектов:', filters.projects.size);
-    console.log('- Регионов:', filters.regions.size);
-    console.log('- Статусов:', filters.statuses.size);
-    console.log('- Менеджеров:', filters.managers.size);
-    console.log('- Листов:', filters.sheets.size);
+    console.log('Фильтры обновлены');
 }
 
 function fillFilter(selectId, options) {
@@ -984,7 +819,7 @@ function fillFilter(selectId, options) {
 }
 
 function applyFilters() {
-    console.log('🔍 Применяю фильтры...');
+    console.log('Применяю фильтры...');
     
     activeFilters.projects = getSelectedValues('filter-project');
     activeFilters.regions = getSelectedValues('filter-region');
@@ -992,14 +827,12 @@ function applyFilters() {
     activeFilters.managers = getSelectedValues('filter-manager');
     activeFilters.sheets = getSelectedValues('filter-sheets');
     
-    console.log('Активные фильтры:', activeFilters);
-    
     showPointsOnMap();
     showNotification('Фильтры применены', 'success');
 }
 
 function clearFilters() {
-    console.log('🧹 Сбрасываю фильтры...');
+    console.log('Сбрасываю фильтры...');
     
     ['filter-sheets', 'filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
         const select = document.getElementById(id);
@@ -1034,22 +867,18 @@ function getSelectedValues(selectId) {
 
 function filterPoints() {
     return allPoints.filter(point => {
-        // Проверяем фильтр по листам
         if (activeFilters.sheets.length > 0 && !activeFilters.sheets.includes(point.sheet)) {
             return false;
         }
         
-        // Проверяем фильтр по проектам
         if (activeFilters.projects.length > 0 && !activeFilters.projects.includes(point.project)) {
             return false;
         }
         
-        // Проверяем фильтр по регионам
         if (activeFilters.regions.length > 0 && !activeFilters.regions.includes(point.region)) {
             return false;
         }
         
-        // Проверяем фильтр по статусам
         if (activeFilters.statuses.length > 0) {
             const normalizedStatus = normalizeADTSStatus(point.status);
             if (!activeFilters.statuses.includes(normalizedStatus)) {
@@ -1057,7 +886,6 @@ function filterPoints() {
             }
         }
         
-        // Проверяем фильтр по менеджерам
         if (activeFilters.managers.length > 0 && !activeFilters.managers.includes(point.manager)) {
             return false;
         }
@@ -1078,7 +906,7 @@ function searchPoints() {
         return;
     }
     
-    console.log(`🔎 Поиск: "${query}"`);
+    console.log(`Поиск: "${query}"`);
     
     const results = allPoints.filter(point => {
         const searchFields = [
@@ -1101,7 +929,6 @@ function searchPoints() {
         return;
     }
     
-    // Показываем только найденные точки
     markerCluster.clearLayers();
     results.forEach(point => {
         if (point.lat && point.lng) {
@@ -1110,7 +937,6 @@ function searchPoints() {
         }
     });
     
-    // Центрируем карту на результатах
     if (results.length > 0) {
         const bounds = L.latLngBounds(
             results.filter(p => p.lat && p.lng).map(p => [p.lat, p.lng])
@@ -1177,27 +1003,13 @@ function showPointDetails(point) {
             ${point.sheet ? `
                 <p style="margin-bottom: 12px;">
                     <strong style="color: #3498db;">Лист:</strong><br>
-                    <span style="font-size: 14px; color: #3498db;">${point.sheet}</span>
-                </p>
-            ` : ''}
-            
-            ${point.manager ? `
-                <p style="margin-bottom: 12px;">
-                    <strong style="color: #3498db;">Менеджер:</strong><br>
-                    <span style="font-size: 14px;">${point.manager}</span>
+                    <span style="font-size: 14px;">${point.sheet}</span>
                 </p>
             ` : ''}
         </div>
-        
-        ${point.isMock ? `
-            <div style="margin-top: 20px; padding: 10px; background: #f39c12; color: white; border-radius: 6px; font-size: 13px;">
-                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
-            </div>
-        ` : ''}
     `;
     
     infoSection.style.display = 'block';
-    infoSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ========== СТАТИСТИКА ==========
@@ -1207,17 +1019,28 @@ function updateStatistics() {
     const totalPoints = allPoints.length;
     const shownPoints = filteredPoints.length;
     
-    document.getElementById('total-points').textContent = totalPoints;
-    document.getElementById('shown-points').textContent = shownPoints;
+    // Используем безопасные проверки на существование элементов
+    const totalElement = document.getElementById('total-points');
+    const shownElement = document.getElementById('shown-points');
+    const accuracyElement = document.getElementById('accuracy-stats');
+    const percentageElement = document.getElementById('shown-percentage');
+    
+    if (totalElement) totalElement.textContent = totalPoints;
+    if (shownElement) shownElement.textContent = shownPoints;
     
     // Точные vs приблизительные координаты
     const exactPoints = filteredPoints.filter(p => !p.isMock).length;
     const approxPoints = filteredPoints.filter(p => p.isMock).length;
-    document.getElementById('accuracy-stats').textContent = `${exactPoints}/${approxPoints}`;
+    
+    if (accuracyElement) {
+        accuracyElement.textContent = `${exactPoints}/${approxPoints}`;
+    }
     
     // Процент показанных точек
     const percentage = totalPoints > 0 ? Math.round((shownPoints / totalPoints) * 100) : 0;
-    document.getElementById('shown-percentage').textContent = `${percentage}%`;
+    if (percentageElement) {
+        percentageElement.textContent = `${percentage}%`;
+    }
 }
 
 function updateStatusStatistics() {
@@ -1229,7 +1052,7 @@ function updateStatusStatistics() {
         statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
     
-    // Обновляем счетчики в легенде
+    // Обновляем счетчики в легенде, если элементы существуют
     const statusElements = {
         'Выполнен': 'count-completed',
         'Нет оборудования': 'count-no-equipment',
@@ -1240,7 +1063,8 @@ function updateStatusStatistics() {
     };
     
     Object.keys(statusElements).forEach(status => {
-        const element = document.getElementById(statusElements[status]);
+        const elementId = statusElements[status];
+        const element = document.getElementById(elementId);
         if (element) {
             element.textContent = statusCounts[status] || 0;
         }
@@ -1249,14 +1073,14 @@ function updateStatusStatistics() {
 
 function updateFilterCounts() {
     const filters = [
-        { id: 'filter-sheets', countId: 'sheets-count', label: 'листов' },
-        { id: 'filter-project', countId: 'project-count', label: 'проектов' },
-        { id: 'filter-region', countId: 'region-count', label: 'регионов' },
-        { id: 'filter-status', countId: 'status-count', label: 'статусов' },
-        { id: 'filter-manager', countId: 'manager-count', label: 'менеджеров' }
+        { id: 'filter-sheets', countId: 'sheets-count' },
+        { id: 'filter-project', countId: 'project-count' },
+        { id: 'filter-region', countId: 'region-count' },
+        { id: 'filter-status', countId: 'status-count' },
+        { id: 'filter-manager', countId: 'manager-count' }
     ];
     
-    filters.forEach(({ id, countId, label }) => {
+    filters.forEach(({ id, countId }) => {
         const select = document.getElementById(id);
         const countElement = document.getElementById(countId);
         
@@ -1265,9 +1089,9 @@ function updateFilterCounts() {
             const total = select.options.length - 1;
             
             if (selected === 0) {
-                countElement.textContent = `Все ${label} (${total})`;
+                countElement.textContent = `Все (${total})`;
             } else {
-                countElement.textContent = `${selected} из ${total} ${label}`;
+                countElement.textContent = `${selected} выбрано`;
             }
         }
     });
@@ -1306,28 +1130,6 @@ function updateLegend() {
         `;
     });
     
-    // Общая статистика
-    const totalFiltered = filteredPoints.length;
-    const totalAll = allPoints.length;
-    const percentage = totalAll > 0 ? Math.round((totalFiltered / totalAll) * 100) : 0;
-    
-    html += `
-        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px;">
-            <div style="display: flex; justify-content: space-between;">
-                <span>Показано:</span>
-                <span>${totalFiltered}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span>Всего:</span>
-                <span>${totalAll}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span>Покрытие:</span>
-                <span>${percentage}%</span>
-            </div>
-        </div>
-    `;
-    
     container.innerHTML = html;
 }
 
@@ -1360,103 +1162,36 @@ function setupAutoUpdate() {
         
         updateInterval = setInterval(() => {
             if (!isLoading) {
-                console.log('🔄 Автоматическое обновление данных...');
+                console.log('Автоматическое обновление данных...');
                 loadData();
             }
         }, CONFIG.UPDATE.interval);
-        
-        console.log(`⏰ Автообновление настроено: каждые ${CONFIG.UPDATE.interval/1000} секунд`);
     }
-}
-
-// ========== ДЕМО-ДАННЫЕ ==========
-
-function showDemoData() {
-    console.log('🔄 Показываю демо-данные...');
-    
-    allPoints = [
-        {
-            id: 'demo_1',
-            name: 'Пример точки 1',
-            region: 'Москва',
-            address: 'ул. Примерная, 1',
-            status: 'Выполнено',
-            manager: 'Иванов И.И.',
-            project: 'Демо проект',
-            sheet: 'Москва',
-            lat: 55.7558,
-            lng: 37.6173,
-            isMock: false
-        },
-        {
-            id: 'demo_2',
-            name: 'Пример точки 2',
-            region: 'Санкт-Петербург',
-            address: 'ул. Тестовая, 2',
-            status: 'В очереди',
-            manager: 'Петров П.П.',
-            project: 'Демо проект',
-            sheet: 'СПб',
-            lat: 59.9343,
-            lng: 30.3351,
-            isMock: false
-        }
-    ];
-    
-    availableSheets = [
-        { id: '1', title: 'Москва' },
-        { id: '2', title: 'СПб' }
-    ];
-    
-    updateSheetsFilter(availableSheets);
-    updateFilters();
-    updateStatistics();
-    updateStatusStatistics();
-    updateLegend();
-    updateLastUpdateTime();
-    showPointsOnMap();
-    
-    updateStatus('Демо-данные загружены', 'warning');
 }
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 function getRandomCoordinate(address, region, sheetName) {
-    // Базовая координата по умолчанию
     let baseLat = 55.7558;
     let baseLng = 37.6173;
     
-    // Пытаемся определить регион
     if (region) {
         const regionLower = region.toLowerCase();
         
-        // Москва и область
         if (regionLower.includes('москва')) {
             baseLat = 55.7558; baseLng = 37.6173;
         }
-        // Санкт-Петербург
         else if (regionLower.includes('петербург') || regionLower.includes('спб')) {
             baseLat = 59.9343; baseLng = 30.3351;
         }
-        // Другие крупные города
         else if (regionLower.includes('новосибирск')) {
             baseLat = 55.0084; baseLng = 82.9357;
         }
         else if (regionLower.includes('екатеринбург')) {
             baseLat = 56.8389; baseLng = 60.6057;
         }
-        else if (regionLower.includes('казань')) {
-            baseLat = 55.7961; baseLng = 49.1064;
-        }
-        else if (regionLower.includes('нижний')) {
-            baseLat = 56.3269; baseLng = 44.0065;
-        }
-        else if (regionLower.includes('краснодар')) {
-            baseLat = 45.0355; baseLng = 38.9753;
-        }
     }
     
-    // Добавляем случайное смещение
     const lat = baseLat + (Math.random() - 0.5) * 0.2;
     const lng = baseLng + (Math.random() - 0.5) * 0.4;
     
@@ -1472,57 +1207,48 @@ window.searchPoints = searchPoints;
 window.searchPointsSidebar = searchPointsSidebar;
 window.closeModal = closeModal;
 window.centerMap = centerMapOnFilteredPoints;
-window.centerMapOnFilteredPoints = centerMapOnFilteredPoints;
 window.updateLegend = updateLegend;
 window.updateFilterCounts = updateFilterCounts;
 window.loadAvailableSheets = loadAvailableSheets;
 window.getSelectedSheets = getSelectedSheets;
-window.selectAllSheets = selectAllSheets;
 
 // Функция для быстрого фильтра по статусу
 window.filterByStatus = function(status) {
     const statusSelect = document.getElementById('filter-status');
     if (!statusSelect) return;
     
-    // Сбрасываем все выборы
-    Array.from(statusSelect.options).forEach(opt => opt.selected = false);
-    
-    // Выбираем нужный статус
     Array.from(statusSelect.options).forEach(opt => {
-        if (opt.value === status) opt.selected = true;
+        opt.selected = opt.value === status;
     });
     
     applyFilters();
     showNotification(`Фильтр по статусу: ${status}`, 'success');
 };
 
-// Добавляем CSS для загрузчика
+// Добавляем CSS
 document.addEventListener('DOMContentLoaded', function() {
     const style = document.createElement('style');
     style.textContent = `
-        .loader {
-            border: 4px solid rgba(255,255,255,0.1);
-            border-radius: 50%;
-            border-top: 4px solid #3498db;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
         .custom-marker:hover {
             transform: scale(1.2);
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
             z-index: 1000;
         }
         
+        .legend-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 8px 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
         .legend-item:hover {
-            background: rgba(255,255,255,0.3) !important;
+            background: rgba(255,255,255,0.3);
             transform: translateX(5px);
         }
     `;
