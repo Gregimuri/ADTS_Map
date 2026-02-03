@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Карта торговых точек</title>
+    <title>Карта торговых точек ADTS</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -51,6 +51,13 @@
             padding: 5px;
             background: rgba(255,255,255,0.1);
             border-radius: 4px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        
+        .legend-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateX(3px);
         }
         
         .legend-color {
@@ -59,6 +66,7 @@
             border-radius: 50%;
             border: 2px solid white;
             margin-right: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
         
         .legend-count {
@@ -67,6 +75,33 @@
             background: rgba(0,0,0,0.2);
             padding: 2px 6px;
             border-radius: 10px;
+            min-width: 24px;
+            text-align: center;
+        }
+        
+        /* Стили для улучшенных карточек статистики */
+        .stat-card .stat-icon {
+            position: relative;
+        }
+        
+        .stat-card .stat-icon::after {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            z-index: -1;
+        }
+        
+        /* Подсказки для фильтров */
+        .filter-hint {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 3px;
         }
     </style>
 </head>
@@ -76,9 +111,13 @@
         <div class="sidebar">
             <!-- Заголовок -->
             <div class="header">
-                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ</h1>
+                <h1><i class="fas fa-map-marked-alt"></i> Карта ТТ ADTS</h1>
                 <div class="status" id="status">
                     <i class="fas fa-sync-alt fa-spin"></i> Загрузка...
+                </div>
+                <div class="hint" style="margin-top: 8px;">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Система мониторинга точек ADTS</span>
                 </div>
             </div>
             
@@ -91,6 +130,10 @@
                     <div class="stat-info">
                         <div class="stat-value" id="total-points">0</div>
                         <div class="stat-label">Всего точек</div>
+                        <div class="filter-hint">
+                            <i class="fas fa-filter" style="font-size: 10px;"></i>
+                            <span id="total-hint">Загружается...</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -101,6 +144,7 @@
                     <div class="stat-info">
                         <div class="stat-value" id="shown-points">0</div>
                         <div class="stat-label">Показано</div>
+                        <div class="hint" id="shown-percentage">0%</div>
                     </div>
                 </div>
                 
@@ -111,13 +155,25 @@
                     <div class="stat-info">
                         <div class="stat-value" id="accuracy-stats">-</div>
                         <div class="stat-label">Точность</div>
+                        <div class="hint" id="accuracy-hint">Точные/Приблизительные</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: #9b59b6;">
+                        <i class="fas fa-chart-pie"></i>
+                    </div>
+                    <div class="stat-info">
+                        <div class="stat-value" id="last-update">-:-</div>
+                        <div class="stat-label">Обновлено</div>
+                        <div class="hint" id="update-timer">--:--</div>
                     </div>
                 </div>
             </div>
             
             <!-- Управление -->
             <div class="controls">
-                <button class="btn btn-primary" onclick="loadData()">
+                <button class="btn btn-primary" onclick="loadData()" id="refresh-btn">
                     <i class="fas fa-sync-alt"></i> Обновить данные
                 </button>
                 <button class="btn btn-secondary" onclick="clearFilters()">
@@ -128,10 +184,17 @@
             <!-- Поиск -->
             <div class="search-sidebar" style="padding: 0 20px 15px;">
                 <div style="display: flex; gap: 5px;">
-                    <input type="text" id="search-sidebar" placeholder="Поиск по названию..." style="flex: 1; padding: 10px; border: 1px solid #4a6572; border-radius: 6px; background: #34495e; color: white;">
-                    <button onclick="searchPointsSidebar()" style="padding: 10px 15px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                    <input type="text" id="search-sidebar" placeholder="Поиск по названию, адресу, региону..." 
+                           style="flex: 1; padding: 10px; border: 1px solid #4a6572; border-radius: 6px; background: #34495e; color: white;"
+                           title="Введите текст для поиска. Нажмите Enter для быстрого поиска.">
+                    <button onclick="searchPointsSidebar()" style="padding: 10px 15px; background: #3498db; color: white; border: none; border-radius: 6px; cursor: pointer;"
+                            title="Выполнить поиск">
                         <i class="fas fa-search"></i>
                     </button>
+                </div>
+                <div class="hint" style="margin-top: 5px;">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Используйте Ctrl+клик для множественного выбора в фильтрах</span>
                 </div>
             </div>
             
@@ -140,35 +203,39 @@
                 <h3><i class="fas fa-filter"></i> Фильтры</h3>
                 
                 <div class="filter-group">
-                    <label>Проект:</label>
-                    <select id="filter-project" multiple class="filter-select">
+                    <label for="filter-project">Проект:</label>
+                    <select id="filter-project" multiple class="filter-select" title="Удерживайте Ctrl для выбора нескольких проектов">
                         <option value="">Все проекты</option>
                     </select>
+                    <div class="filter-hint" id="project-count">0 проектов</div>
                 </div>
                 
                 <div class="filter-group">
-                    <label>Регион:</label>
-                    <select id="filter-region" multiple class="filter-select">
+                    <label for="filter-region">Регион:</label>
+                    <select id="filter-region" multiple class="filter-select" title="Удерживайте Ctrl для выбора нескольких регионов">
                         <option value="">Все регионы</option>
                     </select>
+                    <div class="filter-hint" id="region-count">0 регионов</div>
                 </div>
                 
                 <div class="filter-group">
-                    <label>Статус монтажа:</label>
-                    <select id="filter-status" multiple class="filter-select">
+                    <label for="filter-status">Статус монтажа:</label>
+                    <select id="filter-status" multiple class="filter-select" title="Удерживайте Ctrl для выбора нескольких статусов">
                         <option value="">Все статусы</option>
                     </select>
+                    <div class="filter-hint" id="status-count">0 статусов</div>
                 </div>
                 
                 <div class="filter-group">
-                    <label>Менеджер:</label>
-                    <select id="filter-manager" multiple class="filter-select">
+                    <label for="filter-manager">Менеджер:</label>
+                    <select id="filter-manager" multiple class="filter-select" title="Удерживайте Ctrl для выбора нескольких менеджеров">
                         <option value="">Все менеджеры</option>
                     </select>
+                    <div class="filter-hint" id="manager-count">0 менеджеров</div>
                 </div>
                 
                 <div style="display: flex; gap: 10px; margin-top: 15px;">
-                    <button class="btn btn-primary" onclick="applyFilters()" style="flex: 1;">
+                    <button class="btn btn-primary" onclick="applyFilters()" style="flex: 1;" id="apply-filters-btn">
                         <i class="fas fa-check"></i> Применить
                     </button>
                     <button class="btn btn-secondary" onclick="clearFilters()" style="flex: 1;">
@@ -181,7 +248,11 @@
             <div class="point-info" id="point-info" style="display: none;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                     <h4><i class="fas fa-info-circle"></i> Информация о точке</h4>
-                    <button onclick="document.getElementById('point-info').style.display='none'" style="background: none; border: none; color: #95a5a6; cursor: pointer; font-size: 16px;">
+                    <button onclick="document.getElementById('point-info').style.display='none'" 
+                            style="background: none; border: none; color: #95a5a6; cursor: pointer; font-size: 16px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 50%;"
+                            title="Закрыть информацию"
+                            onmouseover="this.style.backgroundColor='rgba(255,255,255,0.1)'"
+                            onmouseout="this.style.backgroundColor='transparent'">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -193,16 +264,67 @@
                 <h5 style="color: white; margin-bottom: 10px; font-size: 14px;">
                     <i class="fas fa-map-pin"></i> Легенда координат
                 </h5>
-                <div style="display: flex; flex-direction: column; gap: 5px;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: #2ecc71; border-radius: 50%; border: 2px solid white;"></div>
+                        <div style="width: 14px; height: 14px; background: #2ecc71; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.2);"></div>
                         <span style="font-size: 12px; color: #ecf0f1;">Точные координаты</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: #f39c12; border-radius: 50%; border: 2px solid white; position: relative;">
+                        <div style="width: 14px; height: 14px; background: #f39c12; border-radius: 50%; border: 2px solid white; position: relative; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">
                             <div style="position: absolute; top: -3px; right: -3px; width: 6px; height: 6px; background: #f39c12; border-radius: 50%; border: 1px solid white;"></div>
                         </div>
                         <span style="font-size: 12px; color: #ecf0f1;">Приблизительные</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Легенда статусов ADTS -->
+            <div class="legend-mini" style="padding: 15px; background: rgba(0,0,0,0.1); margin: 20px; border-radius: 8px;">
+                <h5 style="color: white; margin-bottom: 15px; font-size: 14px;">
+                    <i class="fas fa-palette"></i> Цвета статусов ADTS
+                </h5>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #2ecc71;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Выполнен</span>
+                        </div>
+                        <span id="count-completed" class="legend-count">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #e74c3c;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Нет оборудования</span>
+                        </div>
+                        <span id="count-no-equipment" class="legend-count">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #3498db;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">В очереди</span>
+                        </div>
+                        <span id="count-queue" class="legend-count">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #f1c40f;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Первичный</span>
+                        </div>
+                        <span id="count-primary" class="legend-count">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #9b59b6;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Финальный</span>
+                        </div>
+                        <span id="count-final" class="legend-count">0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="status-indicator" style="background: #95a5a6;"></div>
+                            <span style="font-size: 12px; color: #ecf0f1;">Доработка</span>
+                        </div>
+                        <span id="count-rework" class="legend-count">0</span>
                     </div>
                 </div>
             </div>
@@ -214,8 +336,11 @@
             
             <!-- Поиск на карте -->
             <div class="search-box">
-                <input type="text" id="search" placeholder="Поиск по названию, адресу, региону...">
-                <button onclick="searchPoints()"><i class="fas fa-search"></i></button>
+                <input type="text" id="search" placeholder="Поиск по названию, адресу, региону..." 
+                       title="Введите текст для поиска. Нажмите Enter для быстрого поиска.">
+                <button onclick="searchPoints()" title="Выполнить поиск">
+                    <i class="fas fa-search"></i>
+                </button>
             </div>
             
             <!-- Легенда статусов -->
@@ -229,20 +354,32 @@
                     <i class="fas fa-bolt"></i> Быстрые фильтры
                 </h6>
                 <div style="display: flex; flex-direction: column; gap: 5px;">
-                    <button onclick="filterByStatus('Выполнен')" style="background: #2ecc71; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                    <button onclick="filterByStatus('Выполнен')" style="background: #2ecc71; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left; transition: all 0.3s;"
+                            title="Показать только выполненные точки">
                         <i class="fas fa-check-circle"></i> Выполненные
                     </button>
-                    <button onclick="filterByStatus('Есть проблемы')" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
-                        <i class="fas fa-exclamation-triangle"></i> С проблемами
+                    <button onclick="filterByStatus('Нет оборудования')" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left; transition: all 0.3s;"
+                            title="Показать точки без оборудования">
+                        <i class="fas fa-exclamation-triangle"></i> Без оборудования
                     </button>
-                    <button onclick="filterByStatus('В очереди')" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                    <button onclick="filterByStatus('В очереди')" style="background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left; transition: all 0.3s;"
+                            title="Показать точки в очереди">
                         <i class="fas fa-clock"></i> В очереди
                     </button>
-                    <button onclick="clearFilters()" style="background: #95a5a6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;">
+                    <button onclick="clearFilters()" style="background: #95a5a6; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left; transition: all 0.3s;"
+                            title="Сбросить все фильтры">
                         <i class="fas fa-times"></i> Сбросить все
                     </button>
                 </div>
             </div>
+            
+            <!-- Кнопка централизации карты -->
+            <button onclick="centerMap()" style="position: absolute; bottom: 80px; right: 20px; z-index: 1000; background: white; color: #2c3e50; border: none; width: 40px; height: 40px; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.3s;"
+                    title="Центрировать карту на отфильтрованных точках"
+                    onmouseover="this.style.transform='scale(1.1)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.3)'"
+                    onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 10px rgba(0,0,0,0.2)'">
+                <i class="fas fa-crosshairs"></i>
+            </button>
         </div>
     </div>
 
@@ -254,56 +391,7 @@
             <button class="btn btn-primary" onclick="closeModal()" style="margin-top: 20px;">OK</button>
         </div>
     </div>
-<!-- Легенда статусов ADTS -->
-<div class="legend-mini" style="padding: 15px; background: rgba(0,0,0,0.1); margin: 20px; border-radius: 8px;">
-    <h5 style="color: white; margin-bottom: 15px; font-size: 14px;">
-        <i class="fas fa-palette"></i> Цвета статусов ADTS
-    </h5>
-    <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #2ecc71;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Выполнен</span>
-            </div>
-            <span id="count-completed" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #e74c3c;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Нет оборудования</span>
-            </div>
-            <span id="count-no-equipment" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #3498db;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">В очереди</span>
-            </div>
-            <span id="count-queue" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #f1c40f;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Первичный</span>
-            </div>
-            <span id="count-primary" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #9b59b6;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Финальный</span>
-            </div>
-            <span id="count-final" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <div class="status-indicator" style="background: #95a5a6;"></div>
-                <span style="font-size: 12px; color: #ecf0f1;">Доработка</span>
-            </div>
-            <span id="count-rework" style="font-size: 11px; color: #95a5a6;">0</span>
-        </div>
-    </div>
-</div>
+
     <!-- Библиотеки -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
@@ -319,17 +407,23 @@
         // Функция для быстрого фильтра по статусу
         function filterByStatus(status) {
             const statusSelect = document.getElementById('filter-status');
-            // Очищаем все выборы
+            if (!statusSelect) return;
+            
+            // Сбрасываем все выборы
             Array.from(statusSelect.options).forEach(option => {
                 option.selected = false;
             });
+            
             // Выбираем нужный статус
             Array.from(statusSelect.options).forEach(option => {
                 if (option.value === status) {
                     option.selected = true;
                 }
             });
-            applyFilters();
+            
+            if (typeof applyFilters === 'function') {
+                applyFilters();
+            }
             showNotification(`Фильтр по статусу: ${status}`, 'success');
         }
         
@@ -338,12 +432,38 @@
             const searchInput = document.getElementById('search-sidebar');
             const searchMapInput = document.getElementById('search');
             
-            // Копируем значение в поле поиска на карте
-            if (searchMapInput) {
-                searchMapInput.value = searchInput.value;
-            }
+            if (!searchInput || !searchMapInput) return;
             
-            searchPoints();
+            // Копируем значение в поле поиска на карте
+            searchMapInput.value = searchInput.value;
+            
+            if (typeof searchPoints === 'function') {
+                searchPoints();
+            }
+        }
+        
+        // Функция центрирования карты
+        function centerMap() {
+            if (typeof centerMapOnFilteredPoints === 'function') {
+                centerMapOnFilteredPoints();
+            } else {
+                // Фолбэк функция
+                const filteredPoints = window.filterPoints ? window.filterPoints() : [];
+                if (filteredPoints.length > 0) {
+                    const bounds = L.latLngBounds(
+                        filteredPoints
+                            .filter(p => p.lat && p.lng)
+                            .map(p => [p.lat, p.lng])
+                    );
+                    
+                    if (bounds.isValid()) {
+                        window.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+                        showNotification('Карта центрирована на отфильтрованных точках', 'info');
+                    }
+                } else {
+                    showNotification('Нет точек для центрирования', 'warning');
+                }
+            }
         }
         
         // Автозапуск поиска при нажатии Enter в сайдбаре
@@ -356,23 +476,96 @@
         // Автозапуск поиска при нажатии Enter на карте
         document.getElementById('search').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                searchPoints();
+                if (typeof searchPoints === 'function') {
+                    searchPoints();
+                }
             }
         });
         
         // Обновляем легенду при изменении фильтров
-        document.getElementById('filter-status').addEventListener('change', updateLegendFromApp);
-        document.getElementById('filter-region').addEventListener('change', updateLegendFromApp);
-        document.getElementById('filter-project').addEventListener('change', updateLegendFromApp);
-        document.getElementById('filter-manager').addEventListener('change', updateLegendFromApp);
+        document.getElementById('filter-status').addEventListener('change', function() {
+            if (typeof updateLegendFromApp === 'function') {
+                updateLegendFromApp();
+            }
+            if (typeof updateFilterCounts === 'function') {
+                updateFilterCounts();
+            }
+        });
+        
+        document.getElementById('filter-region').addEventListener('change', function() {
+            if (typeof updateLegendFromApp === 'function') {
+                updateLegendFromApp();
+            }
+            if (typeof updateFilterCounts === 'function') {
+                updateFilterCounts();
+            }
+        });
+        
+        document.getElementById('filter-project').addEventListener('change', function() {
+            if (typeof updateLegendFromApp === 'function') {
+                updateLegendFromApp();
+            }
+            if (typeof updateFilterCounts === 'function') {
+                updateFilterCounts();
+            }
+        });
+        
+        document.getElementById('filter-manager').addEventListener('change', function() {
+            if (typeof updateLegendFromApp === 'function') {
+                updateLegendFromApp();
+            }
+            if (typeof updateFilterCounts === 'function') {
+                updateFilterCounts();
+            }
+        });
+        
+        // Функция для обновления счетчиков фильтров
+        function updateFilterCounts() {
+            const updateCount = (selectId, countElementId) => {
+                const select = document.getElementById(selectId);
+                const countElement = document.getElementById(countElementId);
+                if (select && countElement) {
+                    const selectedCount = Array.from(select.selectedOptions).filter(opt => opt.value !== '').length;
+                    const totalCount = select.options.length - 1; // исключаем "Все"
+                    
+                    if (selectedCount === 0) {
+                        countElement.textContent = `Все (${totalCount})`;
+                    } else {
+                        countElement.textContent = `${selectedCount} из ${totalCount} выбрано`;
+                    }
+                }
+            };
+            
+            updateCount('filter-project', 'project-count');
+            updateCount('filter-region', 'region-count');
+            updateCount('filter-status', 'status-count');
+            updateCount('filter-manager', 'manager-count');
+        }
+        
+        // Инициализация счетчиков фильтров при загрузке
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(updateFilterCounts, 1000);
+        });
         
         function updateLegendFromApp() {
-            // Вызываем функцию updateLegend из app.js
             if (typeof updateLegend === 'function') {
                 updateLegend();
             }
         }
+        
+        // Добавляем тултипы для кнопок
+        document.addEventListener('DOMContentLoaded', function() {
+            // Добавляем тултипы для кнопок управления
+            const refreshBtn = document.getElementById('refresh-btn');
+            if (refreshBtn) {
+                refreshBtn.title = "Обновить данные из Google Таблицы";
+            }
+            
+            const applyBtn = document.getElementById('apply-filters-btn');
+            if (applyBtn) {
+                applyBtn.title = "Применить выбранные фильтры";
+            }
+        });
     </script>
 </body>
 </html>
-
