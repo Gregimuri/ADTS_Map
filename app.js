@@ -12,6 +12,8 @@ let activeFilters = {
 let updateInterval;
 let markersMap = new Map();
 let isLoading = false;
+let lastUpdateTime = null;
+let updateTimerInterval = null;
 
 // Динамические настройки из данных
 let dynamicStatusMapping = {};
@@ -56,6 +58,7 @@ function initApp() {
     showDemoData();
     loadData();
     setupAutoUpdate();
+    startUpdateTimer();
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
@@ -77,11 +80,12 @@ function initMap() {
         
         L.tileLayer(CONFIG.MAP.tileLayer, {
             attribution: CONFIG.MAP.attribution,
-            maxZoom: 18
+            maxZoom: CONFIG.MAP.maxZoom,
+            minZoom: CONFIG.MAP.minZoom
         }).addTo(map);
         
         markerCluster = L.markerClusterGroup({
-            maxClusterRadius: 40,
+            maxClusterRadius: CONFIG.MARKERS.clusterRadius,
             iconCreateFunction: function(cluster) {
                 const count = cluster.getChildCount();
                 const markers = cluster.getAllChildMarkers();
@@ -107,12 +111,18 @@ function initMap() {
                     }
                 }
                 
+                const size = Math.min(40 + Math.sqrt(count) * 5, 60);
+                
                 return L.divIcon({
-                    html: `<div style="background:${color}; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; border:3px solid white; box-shadow:0 2px 5px rgba(0,0,0,0.3);">${count}</div>`,
+                    html: `<div style="background:${color}; color:white; width:${size}px; height:${size}px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; border:3px solid white; box-shadow:0 2px 8px rgba(0,0,0,0.4); font-size:${Math.min(14 + count/10, 18)}px;">${count}</div>`,
                     className: 'custom-cluster',
-                    iconSize: [40, 40]
+                    iconSize: [size, size],
+                    iconAnchor: [size/2, size/2]
                 });
-            }
+            },
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: true,
+            zoomToBoundsOnClick: true
         }).addTo(map);
         
         console.log('Карта успешно инициализирована');
@@ -124,10 +134,28 @@ function initMap() {
 
 // ========== УТИЛИТЫ ==========
 
-function updateStatus(message) {
+function updateStatus(message, type = 'success') {
     const statusElement = document.getElementById('status');
     if (statusElement) {
-        statusElement.innerHTML = `<i class="fas fa-circle" style="color: #2ecc71;"></i> ${message}`;
+        let icon = 'circle';
+        let color = '#2ecc71';
+        
+        switch(type) {
+            case 'error': 
+                icon = 'exclamation-circle';
+                color = '#e74c3c';
+                break;
+            case 'warning':
+                icon = 'exclamation-triangle';
+                color = '#f39c12';
+                break;
+            case 'loading':
+                icon = 'sync-alt fa-spin';
+                color = '#3498db';
+                break;
+        }
+        
+        statusElement.innerHTML = `<i class="fas fa-${icon}" style="color: ${color};"></i> ${message}`;
     }
 }
 
@@ -151,25 +179,35 @@ function closeModal() {
 }
 
 function showNotification(message, type = 'info', duration = 5000) {
-    document.querySelectorAll('.notification').forEach(el => el.remove());
+    // Удаляем старые уведомления
+    document.querySelectorAll('.notification').forEach(el => {
+        if (el.parentElement) el.remove();
+    });
     
     const notification = document.createElement('div');
     notification.className = 'notification';
     
     let icon = 'info-circle';
-    if (type === 'success') icon = 'check-circle';
-    else if (type === 'error') icon = 'exclamation-circle';
-    else if (type === 'warning') icon = 'exclamation-triangle';
+    let bgColor = '#3498db';
+    
+    switch(type) {
+        case 'success':
+            icon = 'check-circle';
+            bgColor = '#2ecc71';
+            break;
+        case 'error':
+            icon = 'exclamation-circle';
+            bgColor = '#e74c3c';
+            break;
+        case 'warning':
+            icon = 'exclamation-triangle';
+            bgColor = '#f39c12';
+            break;
+    }
     
     notification.innerHTML = `
         <div style="
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 20px;
-            background: ${type === 'success' ? '#2ecc71' : 
-                         type === 'error' ? '#e74c3c' : 
-                         type === 'warning' ? '#f39c12' : '#3498db'};
+            background: ${bgColor};
             color: white;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
@@ -177,24 +215,76 @@ function showNotification(message, type = 'info', duration = 5000) {
             display: flex;
             align-items: center;
             gap: 10px;
-            animation: slideIn 0.3s ease;
+            animation: slideInRight 0.3s ease;
             max-width: 400px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 15px 20px;
         ">
-            <i class="fas fa-${icon}"></i>
-            <span>${message}</span>
+            <i class="fas fa-${icon}" style="font-size: 18px;"></i>
+            <span style="flex: 1; font-size: 14px;">${message}</span>
+            <button onclick="this.parentElement.parentElement.remove()" 
+                    style="background: none; border: none; color: white; cursor: pointer; font-size: 14px; opacity: 0.7; transition: opacity 0.2s;"
+                    onmouseover="this.style.opacity='1'"
+                    onmouseout="this.style.opacity='0.7'">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
     `;
     
     document.body.appendChild(notification);
     
-    setTimeout(() => {
-        if (notification.parentElement) {
-            notification.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => {
-                if (notification.parentElement) notification.remove();
-            }, 300);
+    // Автоматическое удаление через указанное время
+    if (duration > 0) {
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentElement) notification.remove();
+                }, 300);
+            }
+        }, duration);
+    }
+}
+
+// ========== ТАЙМЕР ОБНОВЛЕНИЯ ==========
+
+function startUpdateTimer() {
+    if (updateTimerInterval) {
+        clearInterval(updateTimerInterval);
+    }
+    
+    updateTimerInterval = setInterval(() => {
+        const timerElement = document.getElementById('update-timer');
+        if (!timerElement) return;
+        
+        if (lastUpdateTime) {
+            const now = new Date();
+            const diff = Math.floor((now - lastUpdateTime) / 1000); // разница в секундах
+            
+            const minutes = Math.floor(diff / 60);
+            const seconds = diff % 60;
+            
+            if (minutes > 0) {
+                timerElement.textContent = `${minutes} мин ${seconds} сек назад`;
+            } else {
+                timerElement.textContent = `${seconds} сек назад`;
+            }
+        } else {
+            timerElement.textContent = '--:--';
         }
-    }, duration);
+    }, 1000);
+}
+
+function updateLastUpdateTime() {
+    lastUpdateTime = new Date();
+    const timeElement = document.getElementById('last-update');
+    if (timeElement) {
+        const now = new Date();
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        timeElement.textContent = `${hours}:${minutes}`;
+    }
 }
 
 // ========== НОРМАЛИЗАЦИЯ СТАТУСОВ ADTS ==========
@@ -250,13 +340,21 @@ function getStatusColor(status) {
 // ========== ЗАГРУЗКА ДАННЫХ ==========
 
 async function loadData() {
-    if (isLoading) return;
+    if (isLoading) {
+        showNotification('Данные уже загружаются...', 'info', 2000);
+        return;
+    }
     
     isLoading = true;
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+    }
     
     try {
-        updateStatus('Загрузка данных...');
-        showModal('Загрузка', 'Подключение к Google Таблице...');
+        updateStatus('Загрузка данных...', 'loading');
+        showModal('Загрузка', '<div class="loader" style="margin: 20px auto;"></div><p>Подключение к Google Таблице...</p>');
         
         console.log('Начинаю загрузку данных ADTS...');
         const data = await loadDataAsCSV();
@@ -274,9 +372,9 @@ async function loadData() {
         determineDynamicSettings(allPoints);
         
         // Показываем несколько точек для отладки
-        if (allPoints.length > 0) {
+        if (allPoints.length > 0 && CONFIG.DEBUG.logLevel === 'debug') {
             console.log('Примеры обработанных точек ADTS:');
-            allPoints.slice(0, 5).forEach((point, i) => {
+            allPoints.slice(0, 3).forEach((point, i) => {
                 console.log(`${i+1}. Название: "${point.name}" | Регион: "${point.region}" | Статус: "${point.status}" | Нормализованный: "${normalizeADTSStatus(point.status)}"`);
             });
         }
@@ -289,14 +387,15 @@ async function loadData() {
         updateStatusStatistics();
         updateLegend();
         showPointsOnMap();
+        updateLastUpdateTime();
         
         closeModal();
-        updateStatus(`Загружено: ${allPoints.length} точек ADTS`);
-        showNotification('Данные успешно загружены', 'success');
+        updateStatus(`Загружено: ${allPoints.length} точек ADTS`, 'success');
+        showNotification(`Данные успешно загружены: ${allPoints.length} точек`, 'success');
         
     } catch (error) {
         console.error('Ошибка загрузки:', error);
-        updateStatus('Ошибка загрузки');
+        updateStatus('Ошибка загрузки', 'error');
         showNotification('Ошибка загрузки данных. Используются демо-данные.', 'error');
         
         if (allPoints.length === 0) {
@@ -305,6 +404,10 @@ async function loadData() {
         
     } finally {
         isLoading = false;
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Обновить данные';
+        }
     }
 }
 
@@ -505,7 +608,8 @@ function processData(rows) {
             contractor: '',
             project: '',
             originalAddress: '',
-            originalStatus: ''
+            originalStatus: '',
+            dateAdded: new Date().toISOString().split('T')[0]
         };
         
         Object.keys(colIndices).forEach(key => {
@@ -603,7 +707,8 @@ function processDataSimple(rows) {
             manager: '',
             contractor: '',
             project: '',
-            isMock: true
+            isMock: true,
+            dateAdded: new Date().toISOString().split('T')[0]
         };
         
         if (row.length > nameIndex) point.name = cleanString(row[nameIndex]);
@@ -718,7 +823,8 @@ async function addCoordinatesFast(points) {
                 lat: coords.lat, 
                 lng: coords.lng, 
                 isMock: true,
-                geocodingSource: 'approximate'
+                geocodingSource: 'approximate',
+                accuracy: 'low'
             };
         }
         return point;
@@ -744,20 +850,15 @@ function showPointsOnMap() {
         }
     });
     
-    if (filteredPoints.length > 0 && filteredPoints.some(p => p.lat && p.lng)) {
-        const bounds = L.latLngBounds(
-            filteredPoints
-                .filter(p => p.lat && p.lng)
-                .map(p => [p.lat, p.lng])
-        );
-        
-        if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-        }
-    }
-    
+    // Обновляем статистику
     updateStatistics();
     updateStatusStatistics();
+    updateFilterCounts();
+    
+    // Центрируем карту если есть точки
+    if (filteredPoints.length > 0 && filteredPoints.some(p => p.lat && p.lng)) {
+        centerMapOnFilteredPoints();
+    }
 }
 
 function createMarker(point) {
@@ -789,17 +890,19 @@ function createMarker(point) {
     }
     
     let accuracyIcon = '';
+    let accuracyTitle = 'Точные координаты';
     if (point.isMock) {
         accuracyIcon = '<div style="position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: #f39c12; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>';
+        accuracyTitle = 'Приблизительные координаты';
     }
     
     const icon = L.divIcon({
         html: `
-            <div style="position: relative;">
+            <div style="position: relative;" title="${point.name || 'Точка ADTS'} - ${normalizedStatus} (${accuracyTitle})">
                 <div class="custom-marker ${markerClass}" style="
                     background: ${color};
-                    width: 34px;
-                    height: 34px;
+                    width: ${CONFIG.MARKERS.defaultSize}px;
+                    height: ${CONFIG.MARKERS.defaultSize}px;
                     border-radius: 50%;
                     border: 3px solid white;
                     box-shadow: 0 3px 8px rgba(0,0,0,0.3);
@@ -818,8 +921,8 @@ function createMarker(point) {
             </div>
         `,
         className: 'adts-marker',
-        iconSize: [34, 34],
-        iconAnchor: [17, 34]
+        iconSize: [CONFIG.MARKERS.defaultSize, CONFIG.MARKERS.defaultSize],
+        iconAnchor: [CONFIG.MARKERS.defaultSize/2, CONFIG.MARKERS.defaultSize]
     });
     
     const marker = L.marker([point.lat, point.lng], {
@@ -827,10 +930,15 @@ function createMarker(point) {
         title: `${point.name} - ${normalizedStatus}`,
         status: normalizedStatus,
         pointId: point.id,
-        isMock: point.isMock || false
+        isMock: point.isMock || false,
+        riseOnHover: true
     });
     
-    marker.bindPopup(createPopupContent(point));
+    marker.bindPopup(createPopupContent(point), {
+        maxWidth: CONFIG.MARKERS.popupMaxWidth,
+        className: 'adts-popup'
+    });
+    
     marker.on('click', function() {
         showPointDetails(point);
         // Подсвечиваем маркер при клике
@@ -842,10 +950,12 @@ function createMarker(point) {
     
     marker.on('mouseover', function() {
         this.openPopup();
+        this.setIcon(createHighlightedMarker(point));
     });
     
     marker.on('mouseout', function() {
         this.closePopup();
+        this.setIcon(icon);
     });
     
     return marker;
@@ -854,14 +964,15 @@ function createMarker(point) {
 function createHighlightedMarker(point) {
     const color = getStatusColor(point.status);
     const statusIcon = getStatusIcon(point.status);
+    const size = CONFIG.MARKERS.hoverSize;
     
     return L.divIcon({
         html: `
             <div style="position: relative;">
                 <div style="
                     background: ${color};
-                    width: 42px;
-                    height: 42px;
+                    width: ${size}px;
+                    height: ${size}px;
                     border-radius: 50%;
                     border: 4px solid white;
                     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
@@ -872,6 +983,7 @@ function createHighlightedMarker(point) {
                     font-weight: bold;
                     font-size: 16px;
                     animation: pulse 1s infinite;
+                    z-index: 1000;
                 ">
                     ${statusIcon}
                 </div>
@@ -879,8 +991,8 @@ function createHighlightedMarker(point) {
             </div>
         `,
         className: 'adts-marker-highlighted',
-        iconSize: [42, 42],
-        iconAnchor: [21, 42]
+        iconSize: [size, size],
+        iconAnchor: [size/2, size]
     });
 }
 
@@ -913,7 +1025,7 @@ function createPopupContent(point) {
         </span>`;
     
     return `
-        <div style="min-width: 280px; max-width: 350px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+        <div style="min-width: 280px; max-width: ${CONFIG.MARKERS.popupMaxWidth}px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
             <h4 style="margin: 0 0 12px 0; color: #2c3e50; border-bottom: 3px solid ${color}; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
                 <span>${point.name || 'Без названия'}</span>
                 <span style="font-size: 12px; color: #7f8c8d;">ADTS</span>
@@ -975,6 +1087,10 @@ function createPopupContent(point) {
             ` : ''}
             
             ${accuracyInfo}
+            
+            <div style="margin-top: 10px; font-size: 10px; color: #95a5a6; text-align: right;">
+                ID: ${point.id.substring(0, 8)}...
+            </div>
         </div>
     `;
 }
@@ -1009,10 +1125,13 @@ function updateFilters() {
     fillFilter('filter-manager', Array.from(filters.managers).sort());
     
     console.log('Доступные фильтры ADTS:');
-    console.log('- Проекты:', Array.from(filters.projects));
-    console.log('- Регионы:', Array.from(filters.regions));
+    console.log('- Проекты:', Array.from(filters.projects).length);
+    console.log('- Регионы:', Array.from(filters.regions).length);
     console.log('- Статусы:', Array.from(filters.statuses));
-    console.log('- Менеджеры:', Array.from(filters.managers));
+    console.log('- Менеджеры:', Array.from(filters.managers).length);
+    
+    // Обновляем подсказки
+    updateFilterCounts();
 }
 
 function fillFilter(selectId, options) {
@@ -1022,7 +1141,10 @@ function fillFilter(selectId, options) {
     const selected = Array.from(select.selectedOptions).map(opt => opt.value);
     select.innerHTML = '<option value="">Все</option>';
     
-    options.forEach(option => {
+    // Ограничиваем количество отображаемых опций для производительности
+    const displayOptions = options.slice(0, CONFIG.FILTERS.maxVisibleOptions);
+    
+    displayOptions.forEach(option => {
         if (option && option.trim() !== '') {
             const opt = document.createElement('option');
             opt.value = option;
@@ -1037,7 +1159,6 @@ function fillFilter(selectId, options) {
                 
                 // Добавляем иконку статуса
                 const icon = getStatusIcon(option);
-                opt.textContent = ` ${option}`;
                 opt.innerHTML = `${icon} ${option}`;
             }
             
@@ -1048,6 +1169,15 @@ function fillFilter(selectId, options) {
             select.appendChild(opt);
         }
     });
+    
+    // Если есть скрытые опции, добавляем информацию
+    if (options.length > CONFIG.FILTERS.maxVisibleOptions) {
+        const hiddenCount = options.length - CONFIG.FILTERS.maxVisibleOptions;
+        const opt = document.createElement('option');
+        opt.disabled = true;
+        opt.textContent = `... и еще ${hiddenCount} опций`;
+        select.appendChild(opt);
+    }
 }
 
 function applyFilters() {
@@ -1061,6 +1191,7 @@ function applyFilters() {
     console.log('Активные фильтры:', activeFilters);
     
     showPointsOnMap();
+    updateFilterCounts();
     showNotification('Фильтры применены', 'success');
 }
 
@@ -1069,7 +1200,16 @@ function clearFilters() {
     
     ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
         const select = document.getElementById(id);
-        if (select) select.selectedIndex = 0;
+        if (select) {
+            select.selectedIndex = 0;
+            // Для множественного выбора сбрасываем все опции
+            if (select.multiple) {
+                Array.from(select.options).forEach(opt => opt.selected = false);
+                if (select.options.length > 0) {
+                    select.options[0].selected = true;
+                }
+            }
+        }
     });
     
     activeFilters = {
@@ -1080,6 +1220,7 @@ function clearFilters() {
     };
     
     showPointsOnMap();
+    updateFilterCounts();
     showNotification('Фильтры сброшены', 'success');
 }
 
@@ -1089,7 +1230,7 @@ function getSelectedValues(selectId) {
     
     return Array.from(select.selectedOptions)
         .map(opt => opt.value)
-        .filter(val => val !== '');
+        .filter(val => val !== '' && !val.includes('... и еще'));
 }
 
 function filterPoints() {
@@ -1166,7 +1307,7 @@ function searchPoints() {
         );
         
         if (bounds.isValid()) {
-            map.fitBounds(bounds, { padding: [50, 50] });
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
         }
     }
     
@@ -1265,6 +1406,7 @@ function showPointDetails(point) {
             <div>ID: ${point.id}</div>
             <div>Строка в таблице: ${point.sheetRow}</div>
             ${point.originalStatus ? `<div>Исходный статус: ${point.originalStatus}</div>` : ''}
+            ${point.dateAdded ? `<div>Добавлено: ${point.dateAdded}</div>` : ''}
         </div>
     `;
     
@@ -1283,10 +1425,28 @@ function updateStatistics() {
     const totalPointsElement = document.getElementById('total-points');
     const shownPointsElement = document.getElementById('shown-points');
     const accuracyElement = document.getElementById('accuracy-stats');
+    const shownPercentageElement = document.getElementById('shown-percentage');
+    const totalHintElement = document.getElementById('total-hint');
+    const accuracyHintElement = document.getElementById('accuracy-hint');
     
     if (totalPointsElement) totalPointsElement.textContent = allPoints.length;
     if (shownPointsElement) shownPointsElement.textContent = shownPoints;
     if (accuracyElement) accuracyElement.textContent = `${exactPoints}/${approximatePoints}`;
+    
+    // Обновляем проценты
+    if (shownPercentageElement && allPoints.length > 0) {
+        const percentage = Math.round((shownPoints / allPoints.length) * 100);
+        shownPercentageElement.textContent = `${percentage}% от общего числа`;
+    }
+    
+    // Обновляем подсказки
+    if (totalHintElement) {
+        totalHintElement.textContent = `${filteredPoints.length} отфильтровано`;
+    }
+    
+    if (accuracyHintElement) {
+        accuracyHintElement.textContent = `Точные: ${exactPoints}, Приблизительные: ${approximatePoints}`;
+    }
 }
 
 function updateStatusStatistics() {
@@ -1367,6 +1527,28 @@ function updateStatusChart(statusCounts) {
     chartElement.title = `Статусы ADTS: ${Object.entries(statusCounts).map(([s, c]) => `${s}: ${c}`).join(', ')}`;
 }
 
+function updateFilterCounts() {
+    const updateCount = (selectId, countElementId) => {
+        const select = document.getElementById(selectId);
+        const countElement = document.getElementById(countElementId);
+        if (select && countElement) {
+            const selectedCount = Array.from(select.selectedOptions).filter(opt => opt.value !== '').length;
+            const totalCount = Math.min(select.options.length - 1, CONFIG.FILTERS.maxVisibleOptions); // исключаем "Все"
+            
+            if (selectedCount === 0) {
+                countElement.textContent = `Все (${totalCount})`;
+            } else {
+                countElement.textContent = `${selectedCount} выбрано`;
+            }
+        }
+    };
+    
+    updateCount('filter-project', 'project-count');
+    updateCount('filter-region', 'region-count');
+    updateCount('filter-status', 'status-count');
+    updateCount('filter-manager', 'manager-count');
+}
+
 function updateLegend() {
     const container = document.getElementById('legend');
     if (!container) return;
@@ -1410,7 +1592,7 @@ function updateLegend() {
                 border-left: 4px solid ${status.color};
                 transition: all 0.3s;
                 cursor: pointer;
-            " onclick="filterByStatus('${status.name}')" title="Нажмите для фильтрации">
+            " onclick="filterByStatus('${status.name}')" title="Нажмите для фильтрации по статусу '${status.name}'">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="
                         width: 16px;
@@ -1442,6 +1624,7 @@ function updateLegend() {
     // Добавляем общую статистику
     const totalFiltered = filteredPoints.length;
     const totalAll = allPoints.length;
+    const percentage = totalAll > 0 ? Math.round((totalFiltered / totalAll) * 100) : 0;
     
     legendHTML += `
         <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #eee; font-size: 12px; color: #7f8c8d;">
@@ -1449,9 +1632,13 @@ function updateLegend() {
                 <span>Показано:</span>
                 <span style="font-weight: 600; color: #2c3e50;">${totalFiltered}</span>
             </div>
-            <div style="display: flex; justify-content: space-between;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
                 <span>Всего точек:</span>
                 <span style="font-weight: 600; color: #2c3e50;">${totalAll}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span>Покрытие:</span>
+                <span style="font-weight: 600; color: #2c3e50;">${percentage}%</span>
             </div>
         </div>
     `;
@@ -1459,12 +1646,46 @@ function updateLegend() {
     container.innerHTML = legendHTML;
 }
 
+// ========== ЦЕНТРИРОВАНИЕ КАРТЫ ==========
+
+function centerMapOnFilteredPoints() {
+    const filteredPoints = filterPoints();
+    const pointsWithCoords = filteredPoints.filter(p => p.lat && p.lng);
+    
+    if (pointsWithCoords.length === 0) {
+        showNotification('Нет точек с координатами для центрирования', 'warning');
+        return;
+    }
+    
+    if (pointsWithCoords.length === 1) {
+        const point = pointsWithCoords[0];
+        map.setView([point.lat, point.lng], 14);
+        showNotification('Карта центрирована на выбранной точке', 'info');
+    } else {
+        const bounds = L.latLngBounds(pointsWithCoords.map(p => [p.lat, p.lng]));
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
+            showNotification(`Карта центрирована на ${pointsWithCoords.length} точках`, 'info');
+        }
+    }
+}
+
 // ========== АВТООБНОВЛЕНИЕ ==========
 
 function setupAutoUpdate() {
-    if (CONFIG.UPDATE?.auto) {
-        updateInterval = setInterval(loadData, CONFIG.UPDATE.interval);
-        console.log('Автообновление настроено');
+    if (CONFIG.UPDATE?.auto && CONFIG.UPDATE.interval > 0) {
+        if (updateInterval) {
+            clearInterval(updateInterval);
+        }
+        
+        updateInterval = setInterval(() => {
+            if (!isLoading) {
+                console.log('Автообновление данных...');
+                loadData();
+            }
+        }, CONFIG.UPDATE.interval);
+        
+        console.log(`Автообновление настроено: каждые ${CONFIG.UPDATE.interval/1000} сек`);
     }
 }
 
@@ -1485,7 +1706,8 @@ function showDemoData() {
             project: 'ADTS Москва 2024',
             lat: 55.7570,
             lng: 37.6145,
-            isMock: false
+            isMock: false,
+            dateAdded: '2024-01-15'
         },
         {
             id: 'demo_adts_2',
@@ -1498,7 +1720,8 @@ function showDemoData() {
             project: 'ADTS Подмосковье',
             lat: 55.8890,
             lng: 37.4450,
-            isMock: false
+            isMock: false,
+            dateAdded: '2024-02-10'
         },
         {
             id: 'demo_adts_3',
@@ -1511,7 +1734,8 @@ function showDemoData() {
             project: 'ADTS Сибирь',
             lat: 53.3481,
             lng: 83.7794,
-            isMock: true
+            isMock: true,
+            dateAdded: '2024-03-05'
         },
         {
             id: 'demo_adts_4',
@@ -1524,7 +1748,8 @@ function showDemoData() {
             project: 'ADTS Юг',
             lat: 45.0355,
             lng: 38.9753,
-            isMock: true
+            isMock: true,
+            dateAdded: '2024-03-20'
         },
         {
             id: 'demo_adts_5',
@@ -1537,7 +1762,8 @@ function showDemoData() {
             project: 'ADTS Урал',
             lat: 56.8389,
             lng: 60.6057,
-            isMock: true
+            isMock: true,
+            dateAdded: '2024-04-01'
         },
         {
             id: 'demo_adts_6',
@@ -1550,7 +1776,8 @@ function showDemoData() {
             project: 'ADTS Сибирь',
             lat: 55.0084,
             lng: 82.9357,
-            isMock: true
+            isMock: true,
+            dateAdded: '2024-04-15'
         },
         {
             id: 'demo_adts_7',
@@ -1563,7 +1790,8 @@ function showDemoData() {
             project: 'ADTS Юг',
             lat: 47.2224,
             lng: 39.7189,
-            isMock: true
+            isMock: true,
+            dateAdded: '2024-05-01'
         },
         {
             id: 'demo_adts_8',
@@ -1576,7 +1804,8 @@ function showDemoData() {
             project: 'ADTS Поволжье',
             lat: 55.7961,
             lng: 49.1064,
-            isMock: true
+            isMock: true,
+            dateAdded: '2024-05-10'
         }
     ];
     
@@ -1587,9 +1816,10 @@ function showDemoData() {
     updateStatistics();
     updateStatusStatistics();
     updateLegend();
+    updateLastUpdateTime();
     showPointsOnMap();
     
-    updateStatus('Демо-данные ADTS загружены');
+    updateStatus('Демо-данные ADTS загружены', 'warning');
     showNotification('Используются демо-данные ADTS', 'warning');
 }
 
@@ -1817,6 +2047,7 @@ function getRandomCoordinate(address, region = '') {
             if (regionStr.includes(key.toLowerCase()) || key.toLowerCase().includes(regionStr)) {
                 baseLat = coords.lat;
                 baseLng = coords.lng;
+                radius = 0.5; // Увеличиваем радиус для регионов
                 break;
             }
         }
@@ -1842,27 +2073,11 @@ window.clearFilters = clearFilters;
 window.applyFilters = applyFilters;
 window.searchPoints = searchPoints;
 window.closeModal = closeModal;
-
-// Функция для быстрого фильтра по статусу
-window.filterByStatus = function(status) {
-    const statusSelect = document.getElementById('filter-status');
-    if (!statusSelect) return;
-    
-    // Сбрасываем все выборы
-    Array.from(statusSelect.options).forEach(option => {
-        option.selected = false;
-    });
-    
-    // Выбираем указанный статус
-    Array.from(statusSelect.options).forEach(option => {
-        if (option.value === status) {
-            option.selected = true;
-        }
-    });
-    
-    applyFilters();
-    showNotification(`Применен фильтр: ${status}`, 'success');
-};
+window.filterPoints = filterPoints;
+window.centerMapOnFilteredPoints = centerMapOnFilteredPoints;
+window.updateLegend = updateLegend;
+window.updateFilterCounts = updateFilterCounts;
+window.updateLegendFromApp = updateLegend;
 
 // Инициализация дополнительных обработчиков
 setTimeout(() => {
@@ -1870,9 +2085,9 @@ setTimeout(() => {
     const style = document.createElement('style');
     style.textContent = `
         @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
+            0% { transform: scale(1); box-shadow: 0 3px 8px rgba(0,0,0,0.3); }
+            50% { transform: scale(1.1); box-shadow: 0 5px 15px rgba(0,0,0,0.4); }
+            100% { transform: scale(1); box-shadow: 0 3px 8px rgba(0,0,0,0.3); }
         }
         
         .custom-marker:hover {
@@ -1884,9 +2099,42 @@ setTimeout(() => {
         .legend-item:hover {
             transform: translateX(5px);
             box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+            background: rgba(255,255,255,0.25) !important;
+        }
+        
+        .adts-popup .leaflet-popup-content-wrapper {
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .adts-popup .leaflet-popup-tip {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .loading-spinner {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top: 3px solid #3498db;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     `;
     document.head.appendChild(style);
     
     console.log('ADTS Карта успешно инициализирована');
+    
+    // Добавляем тултипы для элементов интерфейса
+    if (CONFIG.UI.enableTooltips) {
+        const tooltipElements = document.querySelectorAll('[title]');
+        tooltipElements.forEach(el => {
+            el.setAttribute('data-tooltip', el.getAttribute('title'));
+        });
+    }
 }, 1000);
