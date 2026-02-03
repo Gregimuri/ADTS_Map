@@ -296,7 +296,7 @@ async function loadAvailableSheets() {
         updateStatus('Получение списка листов...', 'loading');
         
         // Используем более простой подход для получения данных
-        const sheetsToTry = ['Москва', 'СПб', 'Лист1', 'Основной'];
+        const sheetsToTry = ['Магнит ДП, ПЧ', 'Лента'];
         availableSheets = sheetsToTry.map((title, index) => ({
             id: index.toString(),
             title: title,
@@ -1254,3 +1254,4 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     document.head.appendChild(style);
 });
+
