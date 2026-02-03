@@ -6,7 +6,8 @@ let activeFilters = {
     projects: [],
     regions: [],
     statuses: [],
-    managers: []
+    managers: [],
+    sheets: [] // Добавляем фильтр по листам
 };
 
 let updateInterval;
@@ -14,6 +15,10 @@ let markersMap = new Map();
 let isLoading = false;
 let lastUpdateTime = null;
 let updateTimerInterval = null;
+let availableSheets = []; // Список доступных листов
+let sheetPointsCache = new Map(); // Кэш точек по листам
+let sheetsInfoCache = null; // Кэш информации о листах
+let lastSheetsFetchTime = null; // Время последнего получения информации о листах
 
 // Динамические настройки из данных
 let dynamicStatusMapping = {};
@@ -53,10 +58,10 @@ const ADTS_STATUS_COLORS = {
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ==========
 
 function initApp() {
-    console.log('Инициализация приложения ADTS...');
+    console.log('Инициализация приложения ADTS с поддержкой листов...');
     initMap();
     showDemoData();
-    loadData();
+    loadAvailableSheets(); // Сначала загружаем доступные листы
     setupAutoUpdate();
     startUpdateTimer();
 }
@@ -94,7 +99,6 @@ function initMap() {
                 const statuses = markers.map(m => m.options.status);
                 
                 // Находим цвет для кластера на основе статусов точек
-                // Приоритет: красный > желтый > синий > фиолетовый > зеленый > серый
                 const priorityOrder = [
                     'Нет оборудования',
                     'Доработка после монтажа',
@@ -287,57 +291,163 @@ function updateLastUpdateTime() {
     }
 }
 
-// ========== НОРМАЛИЗАЦИЯ СТАТУСОВ ADTS ==========
+// ========== РАБОТА С ЛИСТАМИ GOOGLE ТАБЛИЦЫ ==========
 
-function normalizeADTSStatus(status) {
-    if (!status) return 'Не указан';
+async function loadAvailableSheets() {
+    if (!CONFIG.SHEETS.enabled) {
+        console.log('Поддержка листов выключена в конфигурации');
+        updateSheetsFilter([]);
+        loadData(); // Загружаем данные обычным способом
+        return;
+    }
     
-    const statusLower = status.toLowerCase().trim();
+    // Проверяем кэш
+    const now = new Date();
+    if (sheetsInfoCache && lastSheetsFetchTime && 
+        (now - lastSheetsFetchTime) < CONFIG.SHEETS.cacheDuration) {
+        console.log('Использую кэшированную информацию о листах');
+        availableSheets = sheetsInfoCache;
+        updateSheetsFilter(availableSheets);
+        return;
+    }
     
-    // Нормализация для статусов ADTS
-    if (statusLower.includes('выполнен') || statusLower.includes('сдан') || statusLower.includes('завершен')) 
-        return 'Выполнен';
-    if (statusLower.includes('нет оборуд') || statusLower.includes('оборудования нет') || statusLower.includes('ожидание оборуд')) 
-        return 'Нет оборудования';
-    if (statusLower.includes('очеред') || statusLower.includes('в работе') || statusLower.includes('план')) 
-        return 'В очереди';
-    if (statusLower.includes('первичн') || statusLower.includes('начальн') || statusLower.includes('первый')) 
-        return 'Первичный';
-    if (statusLower.includes('финальн') || statusLower.includes('завершающ') || statusLower.includes('окончат')) 
-        return 'Финальный';
-    if (statusLower.includes('доработк') || statusLower.includes('реконструкц') || statusLower.includes('передел')) 
-        return 'Доработка после монтажа';
-    
-    return status;
-}
-
-function getStatusIcon(status) {
-    const normalizedStatus = normalizeADTSStatus(status);
-    
-    switch(normalizedStatus) {
-        case 'Выполнен':
-            return '<i class="fas fa-check-circle"></i>';
-        case 'Нет оборудования':
-            return '<i class="fas fa-times-circle"></i>';
-        case 'В очереди':
-            return '<i class="fas fa-clock"></i>';
-        case 'Первичный':
-            return '<i class="fas fa-hammer"></i>';
-        case 'Финальный':
-            return '<i class="fas fa-check-double"></i>';
-        case 'Доработка после монтажа':
-            return '<i class="fas fa-tools"></i>';
-        default:
-            return '<i class="fas fa-map-marker-alt"></i>';
+    try {
+        console.log('Загружаю информацию о листах...');
+        updateStatus('Получение списка листов...', 'loading');
+        
+        const url = `https://spreadsheets.google.com/feeds/worksheets/${CONFIG.SPREADSHEET_ID}/public/full?alt=json`;
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const sheets = data.feed.entry || [];
+        
+        // Фильтруем листы
+        availableSheets = sheets
+            .map(sheet => {
+                const title = sheet.title.$t;
+                return {
+                    id: sheet.id.$t.split('/').pop(),
+                    title: title,
+                    gid: sheet.id.$t.split('/').pop()
+                };
+            })
+            .filter(sheet => {
+                // Исключаем системные листы
+                const lowerTitle = sheet.title.toLowerCase();
+                const excluded = CONFIG.SHEETS.excludedSheets || [];
+                return !excluded.some(excludedName => 
+                    lowerTitle.includes(excludedName.toLowerCase())
+                );
+            });
+        
+        console.log(`Найдено листов: ${availableSheets.length}`, availableSheets.map(s => s.title));
+        
+        if (availableSheets.length === 0) {
+            console.warn('Не найдено подходящих листов, использую первый лист по умолчанию');
+            if (sheets.length > 0) {
+                availableSheets = [{
+                    id: sheets[0].id.$t.split('/').pop(),
+                    title: sheets[0].title.$t,
+                    gid: sheets[0].id.$t.split('/').pop()
+                }];
+            }
+        }
+        
+        // Обновляем кэш
+        sheetsInfoCache = availableSheets;
+        lastSheetsFetchTime = now;
+        
+        // Обновляем фильтр листов
+        updateSheetsFilter(availableSheets);
+        
+        // Загружаем данные с выбранных листов
+        if (availableSheets.length > 0) {
+            const selectedSheets = getSelectedSheets();
+            if (selectedSheets.length === 0) {
+                // По умолчанию выбираем все листы
+                selectAllSheets();
+            }
+            loadData();
+        } else {
+            showDemoData(); // Показываем демо-данные если нет листов
+        }
+        
+        updateStatus(`Найдено ${availableSheets.length} листов`, 'success');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки листов:', error);
+        updateStatus('Ошибка загрузки листов', 'error');
+        showNotification('Не удалось получить список листов. Использую демо-данные.', 'error');
+        showDemoData();
     }
 }
 
-function getStatusColor(status) {
-    const normalizedStatus = normalizeADTSStatus(status);
-    return ADTS_STATUS_COLORS[normalizedStatus] || dynamicStatusColors.default;
+function updateSheetsFilter(sheets) {
+    console.log('Обновляю фильтр листов...');
+    
+    const sheetSelect = document.getElementById('filter-sheets');
+    if (!sheetSelect) {
+        console.error('Элемент фильтра листов не найден');
+        return;
+    }
+    
+    // Сохраняем текущий выбор
+    const selectedValues = getSelectedSheets();
+    
+    // Очищаем select
+    sheetSelect.innerHTML = '<option value="">Все листы</option>';
+    
+    // Добавляем опции
+    sheets.forEach(sheet => {
+        const option = document.createElement('option');
+        option.value = sheet.title;
+        option.textContent = sheet.title;
+        
+        // Помечаем выбранные
+        if (selectedValues.includes(sheet.title)) {
+            option.selected = true;
+        }
+        
+        sheetSelect.appendChild(option);
+    });
+    
+    // Если нет выбранных листов, выбираем все
+    if (selectedValues.length === 0 && sheets.length > 0) {
+        selectAllSheets();
+    }
+    
+    console.log(`Добавлено ${sheets.length} листов в фильтр`);
 }
 
-// ========== ЗАГРУЗКА ДАННЫХ ==========
+function getSelectedSheets() {
+    const sheetSelect = document.getElementById('filter-sheets');
+    if (!sheetSelect) return [];
+    
+    return Array.from(sheetSelect.selectedOptions)
+        .map(opt => opt.value)
+        .filter(val => val !== '');
+}
+
+function selectAllSheets() {
+    const sheetSelect = document.getElementById('filter-sheets');
+    if (!sheetSelect || availableSheets.length === 0) return;
+    
+    Array.from(sheetSelect.options).forEach(option => {
+        if (option.value !== '') {
+            option.selected = true;
+        }
+    });
+    
+    activeFilters.sheets = availableSheets.map(sheet => sheet.title);
+    console.log('Выбраны все листы:', activeFilters.sheets);
+}
+
+// ========== ЗАГРУЗКА ДАННЫХ С ЛИСТОВ ==========
 
 async function loadData() {
     if (isLoading) {
@@ -356,17 +466,74 @@ async function loadData() {
         updateStatus('Загрузка данных...', 'loading');
         showModal('Загрузка', '<div class="loader" style="margin: 20px auto;"></div><p>Подключение к Google Таблице...</p>');
         
-        console.log('Начинаю загрузку данных ADTS...');
-        const data = await loadDataAsCSV();
+        console.log('Начинаю загрузку данных ADTS с листов...');
         
-        if (!data || data.length === 0) {
-            throw new Error('Не удалось загрузить данные');
+        let allData = [];
+        
+        if (CONFIG.SHEETS.enabled && availableSheets.length > 0) {
+            // Загружаем данные с выбранных листов
+            const selectedSheets = getSelectedSheets();
+            const sheetsToLoad = selectedSheets.length > 0 ? 
+                selectedSheets : availableSheets.map(s => s.title);
+            
+            console.log(`Загружаю данные с ${sheetsToLoad.length} листов:`, sheetsToLoad);
+            
+            for (const sheetName of sheetsToLoad) {
+                try {
+                    console.log(`Загружаю лист: ${sheetName}`);
+                    
+                    // Проверяем кэш
+                    if (sheetPointsCache.has(sheetName)) {
+                        const cachedPoints = sheetPointsCache.get(sheetName);
+                        console.log(`Использую кэш для листа ${sheetName}: ${cachedPoints.length} точек`);
+                        allData = allData.concat(cachedPoints);
+                        continue;
+                    }
+                    
+                    const sheetData = await loadSheetData(sheetName);
+                    
+                    if (sheetData && sheetData.length > 0) {
+                        // Обрабатываем данные и добавляем информацию о листе
+                        const processedPoints = processData(sheetData, sheetName);
+                        
+                        // Добавляем координаты
+                        const pointsWithCoords = await addCoordinatesFast(processedPoints);
+                        
+                        // Сохраняем в кэш
+                        sheetPointsCache.set(sheetName, pointsWithCoords);
+                        
+                        allData = allData.concat(pointsWithCoords);
+                        
+                        console.log(`Лист "${sheetName}" обработан: ${pointsWithCoords.length} точек`);
+                    } else {
+                        console.warn(`Лист "${sheetName}" пуст или не содержит данных`);
+                    }
+                    
+                } catch (sheetError) {
+                    console.error(`Ошибка загрузки листа "${sheetName}":`, sheetError);
+                    showNotification(`Ошибка загрузки листа "${sheetName}"`, 'warning');
+                }
+            }
+        } else {
+            // Загрузка с одного листа (старый метод)
+            console.log('Использую метод загрузки с одного листа');
+            const data = await loadDataAsCSV();
+            
+            if (!data || data.length === 0) {
+                throw new Error('Не удалось загрузить данные');
+            }
+            
+            const processedPoints = processData(data, 'Основной лист');
+            allData = await addCoordinatesFast(processedPoints);
         }
         
-        console.log(`Данные загружены: ${data.length} строк, ${data[0]?.length || 0} столбцов`);
+        if (allData.length === 0) {
+            throw new Error('Не удалось загрузить данные с выбранных листов');
+        }
         
-        allPoints = processData(data);
-        console.log(`Обработано точек: ${allPoints.length}`);
+        console.log(`Всего загружено точек: ${allData.length} с ${availableSheets.length} листов`);
+        
+        allPoints = allData;
         
         // Определяем динамические настройки на основе данных
         determineDynamicSettings(allPoints);
@@ -374,13 +541,18 @@ async function loadData() {
         // Показываем несколько точек для отладки
         if (allPoints.length > 0 && CONFIG.DEBUG.logLevel === 'debug') {
             console.log('Примеры обработанных точек ADTS:');
+            const groupedBySheet = {};
+            allPoints.forEach(point => {
+                if (!groupedBySheet[point.sheet]) {
+                    groupedBySheet[point.sheet] = 0;
+                }
+                groupedBySheet[point.sheet]++;
+            });
+            console.log('Точек по листам:', groupedBySheet);
             allPoints.slice(0, 3).forEach((point, i) => {
-                console.log(`${i+1}. Название: "${point.name}" | Регион: "${point.region}" | Статус: "${point.status}" | Нормализованный: "${normalizeADTSStatus(point.status)}"`);
+                console.log(`${i+1}. Лист: "${point.sheet}" | Название: "${point.name}" | Статус: "${point.status}"`);
             });
         }
-        
-        allPoints = await addCoordinatesFast(allPoints);
-        console.log(`Координаты добавлены: ${allPoints.length}`);
         
         updateFilters();
         updateStatistics();
@@ -390,7 +562,7 @@ async function loadData() {
         updateLastUpdateTime();
         
         closeModal();
-        updateStatus(`Загружено: ${allPoints.length} точек ADTS`, 'success');
+        updateStatus(`Загружено: ${allPoints.length} точек с ${availableSheets.length} листов`, 'success');
         showNotification(`Данные успешно загружены: ${allPoints.length} точек`, 'success');
         
     } catch (error) {
@@ -411,8 +583,56 @@ async function loadData() {
     }
 }
 
+async function loadSheetData(sheetName) {
+    console.log(`Загружаю данные с листа: ${sheetName}`);
+    
+    // URL для загрузки конкретного листа в формате CSV
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
+    
+    console.log(`URL для листа ${sheetName}: ${url}`);
+    
+    try {
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status} для листа ${sheetName}`);
+        }
+        
+        const csvText = await response.text();
+        const parsedData = parseCSV(csvText);
+        
+        console.log(`Лист "${sheetName}" распарсен: ${parsedData.length} строк`);
+        return parsedData;
+        
+    } catch (error) {
+        console.error(`Ошибка загрузки листа "${sheetName}":`, error);
+        
+        // Пробуем альтернативный метод
+        try {
+            console.log(`Пробую альтернативный метод для листа "${sheetName}"`);
+            const altUrl = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv&sheet=${encodeURIComponent(sheetName)}`;
+            const altResponse = await fetch(altUrl);
+            
+            if (!altResponse.ok) {
+                throw new Error(`Альтернативный метод тоже не сработал: ${altResponse.status}`);
+            }
+            
+            const altCsvText = await altResponse.text();
+            const altParsedData = parseCSV(altCsvText);
+            
+            console.log(`Альтернативный метод для "${sheetName}" успешен: ${altParsedData.length} строк`);
+            return altParsedData;
+            
+        } catch (altError) {
+            console.error(`Альтернативный метод для "${sheetName}" тоже не сработал:`, altError);
+            throw error; // Пробрасываем оригинальную ошибку
+        }
+    }
+}
+
+// Старый метод для обратной совместимости
 async function loadDataAsCSV() {
-    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv&id=${CONFIG.SPREADSHEET_ID}`;
+    const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/export?format=csv`;
     
     console.log(`Загружаю CSV: ${url}`);
     
@@ -500,74 +720,10 @@ function parseCSV(csvText) {
     }
 }
 
-// ========== ОБРАБОТКА ДАННЫХ ==========
+// ========== ОБРАБОТКА ДАННЫХ С УЧЕТОМ ЛИСТА ==========
 
-function determineDynamicSettings(points) {
-    console.log('Определение динамических настроек для ADTS...');
-    
-    // Собираем все уникальные статусы из данных
-    const uniqueStatuses = new Set();
-    points.forEach(point => {
-        if (point.status && point.status.trim() !== '') {
-            // Нормализуем статус для ADTS
-            const normalizedStatus = normalizeADTSStatus(point.status);
-            uniqueStatuses.add(normalizedStatus);
-        }
-    });
-    
-    console.log('Уникальные статусы ADTS:', Array.from(uniqueStatuses));
-    
-    // Создаем маппинг статусов
-    dynamicStatusMapping = {};
-    points.forEach(point => {
-        if (point.status && point.status.trim() !== '') {
-            const normalizedStatus = normalizeADTSStatus(point.status);
-            dynamicStatusMapping[point.status] = normalizedStatus;
-        }
-    });
-    
-    // Генерируем цвета для статусов
-    generateStatusColors(Array.from(uniqueStatuses));
-}
-
-function generateStatusColors(statuses) {
-    console.log('Генерация цветов для статусов ADTS:', statuses);
-    
-    // Очищаем текущие цвета
-    dynamicStatusColors = { 'default': '#95a5a6' };
-    
-    // Назначаем цвета из схемы ADTS
-    statuses.forEach(status => {
-        // Ищем точное совпадение в схеме ADTS
-        if (ADTS_STATUS_COLORS[status]) {
-            dynamicStatusColors[status] = ADTS_STATUS_COLORS[status];
-            console.log(`✓ Назначен цвет ${ADTS_STATUS_COLORS[status]} для статуса "${status}"`);
-        } else {
-            // Ищем частичное совпадение
-            let colorFound = false;
-            for (const [key, color] of Object.entries(ADTS_STATUS_COLORS)) {
-                if (status.toLowerCase().includes(key.toLowerCase()) || 
-                    key.toLowerCase().includes(status.toLowerCase())) {
-                    dynamicStatusColors[status] = color;
-                    console.log(`≈ Назначен цвет ${color} для статуса "${status}" (похож на "${key}")`);
-                    colorFound = true;
-                    break;
-                }
-            }
-            
-            // Если не нашли, используем цвет по умолчанию
-            if (!colorFound) {
-                dynamicStatusColors[status] = dynamicStatusColors.default;
-                console.log(`✗ Статус "${status}" не распознан, использован цвет по умолчанию`);
-            }
-        }
-    });
-    
-    console.log('Финальные цвета статусов ADTS:', dynamicStatusColors);
-}
-
-function processData(rows) {
-    console.log('Начинаю обработку данных ADTS...');
+function processData(rows, sheetName = '') {
+    console.log(`Начинаю обработку данных с листа "${sheetName}"...`);
     
     if (!rows || rows.length < 2) {
         return [];
@@ -576,18 +732,16 @@ function processData(rows) {
     const points = [];
     const headers = rows[0].map(h => h.toString().trim());
     
-    console.log('Заголовки столбцов:', headers);
-    console.log('Количество столбцов:', headers.length);
+    console.log(`Лист "${sheetName}": ${headers.length} столбцов`);
     
     const colIndices = findColumnIndices(headers);
-    console.log('Найденные индексы столбцов:', colIndices);
     
     const useSimpleApproach = headers.length < 3 || 
                               Object.values(colIndices).filter(idx => idx !== -1).length < 3;
     
     if (useSimpleApproach) {
-        console.log('Использую простой подход к парсингу данных');
-        return processDataSimple(rows);
+        console.log(`Использую простой подход к парсингу данных для листа "${sheetName}"`);
+        return processDataSimple(rows, sheetName);
     }
     
     for (let i = 1; i < rows.length; i++) {
@@ -598,8 +752,9 @@ function processData(rows) {
         }
         
         const point = {
-            id: `point_${i}_${Date.now()}`,
+            id: `point_${sheetName}_${i}_${Date.now()}`,
             sheetRow: i + 1,
+            sheet: sheetName, // Добавляем информацию о листе
             name: '',
             region: '',
             address: '',
@@ -639,6 +794,11 @@ function processData(rows) {
             point.status = normalizedStatus;
         }
         
+        // Если project не указан, используем название листа
+        if (!point.project || point.project.trim() === '') {
+            point.project = sheetName;
+        }
+        
         if (!point.address && point.region && point.region.includes(',')) {
             point.address = point.region;
             point.region = '';
@@ -651,7 +811,7 @@ function processData(rows) {
             } else if (point.region) {
                 point.name = point.region + ' - Точка ADTS ' + i;
             } else {
-                point.name = 'Точка ADTS ' + i;
+                point.name = `Точка ADTS ${i} (${sheetName})`;
             }
         }
         
@@ -660,12 +820,12 @@ function processData(rows) {
         }
     }
     
-    console.log(`Обработано точек ADTS: ${points.length}`);
+    console.log(`Лист "${sheetName}" обработан: ${points.length} точек`);
     return points;
 }
 
-function processDataSimple(rows) {
-    console.log('Использую простой метод обработки данных ADTS...');
+function processDataSimple(rows, sheetName = '') {
+    console.log(`Использую простой метод обработки данных для листа "${sheetName}"...`);
     
     const points = [];
     const headers = rows[0] || [];
@@ -698,8 +858,9 @@ function processDataSimple(rows) {
         }
         
         const point = {
-            id: `point_${i}_${Date.now()}`,
+            id: `point_${sheetName}_${i}_${Date.now()}`,
             sheetRow: i + 1,
+            sheet: sheetName,
             name: '',
             region: '',
             address: '',
@@ -720,6 +881,11 @@ function processDataSimple(rows) {
         if (row.length > 5) point.manager = cleanString(row[5]);
         if (row.length > 6) point.contractor = cleanString(row[6]);
         
+        // Если project не указан, используем название листа
+        if (!point.project || point.project.trim() === '') {
+            point.project = sheetName;
+        }
+        
         // Нормализуем статус для ADTS
         if (point.status) {
             point.originalStatus = point.status;
@@ -733,7 +899,7 @@ function processDataSimple(rows) {
             } else if (point.region) {
                 point.name = point.region + ' - Точка ADTS ' + i;
             } else {
-                point.name = 'Точка ADTS ' + i;
+                point.name = `Точка ADTS ${i} (${sheetName})`;
             }
         }
         
@@ -742,369 +908,21 @@ function processDataSimple(rows) {
         }
     }
     
-    console.log(`Обработано точек ADTS (простой метод): ${points.length}`);
+    console.log(`Лист "${sheetName}" обработан (простой метод): ${points.length} точек`);
     return points;
 }
 
-function cleanString(str) {
-    if (!str) return '';
-    return str.toString()
-        .replace(/"/g, '')
-        .replace(/'/g, '')
-        .replace(/\r/g, '')
-        .replace(/\n/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
-
-function findColumnIndices(headers) {
-    const indices = {
-        name: -1,
-        region: -1,
-        address: -1,
-        status: -1,
-        manager: -1,
-        contractor: -1,
-        project: -1
-    };
-    
-    const headersLower = headers.map(h => h.toString().toLowerCase().trim());
-    
-    headersLower.forEach((header, index) => {
-        if (header.includes('название') || header.includes('имя') || header.includes('точка') || header.includes('тт')) {
-            if (indices.name === -1) indices.name = index;
-        }
-        if (header.includes('регион') || header.includes('область') || header.includes('край') || header.includes('респ')) {
-            if (indices.region === -1) indices.region = index;
-        }
-        if (header.includes('адрес') || header.includes('улица') || header.includes('местоположение') || header.includes('location')) {
-            if (indices.address === -1) indices.address = index;
-        }
-        if (header.includes('статус') || header.includes('состояние')) {
-            if (indices.status === -1) indices.status = index;
-        }
-        if (header.includes('менеджер') || header.includes('ответственный') || header.includes('фио')) {
-            if (indices.manager === -1) indices.manager = index;
-        }
-        if (header.includes('подрядчик') || header.includes('исполнитель') || header.includes('контрагент')) {
-            if (indices.contractor === -1) indices.contractor = index;
-        }
-        if (header.includes('проект')) {
-            if (indices.project === -1) indices.project = index;
-        }
-    });
-    
-    let nextIndex = 0;
-    Object.keys(indices).forEach(key => {
-        if (indices[key] === -1) {
-            while (Object.values(indices).includes(nextIndex) && nextIndex < headers.length) {
-                nextIndex++;
-            }
-            if (nextIndex < headers.length) {
-                indices[key] = nextIndex;
-                nextIndex++;
-            }
-        }
-    });
-    
-    return indices;
-}
-
-// ========== БЫСТРОЕ ДОБАВЛЕНИЕ КООРДИНАТ ==========
-
-async function addCoordinatesFast(points) {
-    console.log('⚡ Быстрое добавление координат для ADTS...');
-    
-    return points.map(point => {
-        if (!point.lat || !point.lng) {
-            const coords = getRandomCoordinate(point.address || '', point.region || '');
-            return { 
-                ...point, 
-                lat: coords.lat, 
-                lng: coords.lng, 
-                isMock: true,
-                geocodingSource: 'approximate',
-                accuracy: 'low'
-            };
-        }
-        return point;
-    });
-}
-
-// ========== ОТОБРАЖЕНИЕ ТОЧЕК ==========
-
-function showPointsOnMap() {
-    console.log('Показываю точки ADTS на карте...');
-    
-    markerCluster.clearLayers();
-    markersMap.clear();
-    
-    const filteredPoints = filterPoints();
-    console.log(`Фильтровано точек ADTS: ${filteredPoints.length}`);
-    
-    filteredPoints.forEach(point => {
-        if (point.lat && point.lng) {
-            const marker = createMarker(point);
-            markerCluster.addLayer(marker);
-            markersMap.set(point.id, marker);
-        }
-    });
-    
-    // Обновляем статистику
-    updateStatistics();
-    updateStatusStatistics();
-    updateFilterCounts();
-    
-    // Центрируем карту если есть точки
-    if (filteredPoints.length > 0 && filteredPoints.some(p => p.lat && p.lng)) {
-        centerMapOnFilteredPoints();
-    }
-}
-
-function createMarker(point) {
-    const normalizedStatus = normalizeADTSStatus(point.status);
-    const color = getStatusColor(point.status);
-    const statusIcon = getStatusIcon(point.status);
-    
-    // Определяем класс маркера на основе статуса
-    let markerClass = '';
-    switch(normalizedStatus) {
-        case 'Выполнен':
-            markerClass = 'marker-completed';
-            break;
-        case 'Нет оборудования':
-            markerClass = 'marker-no-equipment';
-            break;
-        case 'В очереди':
-            markerClass = 'marker-queue';
-            break;
-        case 'Первичный':
-            markerClass = 'marker-primary';
-            break;
-        case 'Финальный':
-            markerClass = 'marker-final';
-            break;
-        case 'Доработка после монтажа':
-            markerClass = 'marker-rework';
-            break;
-    }
-    
-    let accuracyIcon = '';
-    let accuracyTitle = 'Точные координаты';
-    if (point.isMock) {
-        accuracyIcon = '<div style="position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: #f39c12; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>';
-        accuracyTitle = 'Приблизительные координаты';
-    }
-    
-    const icon = L.divIcon({
-        html: `
-            <div style="position: relative;" title="${point.name || 'Точка ADTS'} - ${normalizedStatus} (${accuracyTitle})">
-                <div class="custom-marker ${markerClass}" style="
-                    background: ${color};
-                    width: ${CONFIG.MARKERS.defaultSize}px;
-                    height: ${CONFIG.MARKERS.defaultSize}px;
-                    border-radius: 50%;
-                    border: 3px solid white;
-                    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: ${['#f1c40f'].includes(color) ? '#2c3e50' : 'white'};
-                    font-weight: bold;
-                    font-size: 14px;
-                    transition: all 0.3s;
-                    cursor: pointer;
-                ">
-                    ${statusIcon}
-                </div>
-                ${accuracyIcon}
-            </div>
-        `,
-        className: 'adts-marker',
-        iconSize: [CONFIG.MARKERS.defaultSize, CONFIG.MARKERS.defaultSize],
-        iconAnchor: [CONFIG.MARKERS.defaultSize/2, CONFIG.MARKERS.defaultSize]
-    });
-    
-    const marker = L.marker([point.lat, point.lng], {
-        icon: icon,
-        title: `${point.name} - ${normalizedStatus}`,
-        status: normalizedStatus,
-        pointId: point.id,
-        isMock: point.isMock || false,
-        riseOnHover: true
-    });
-    
-    marker.bindPopup(createPopupContent(point), {
-        maxWidth: CONFIG.MARKERS.popupMaxWidth,
-        className: 'adts-popup'
-    });
-    
-    marker.on('click', function() {
-        showPointDetails(point);
-        // Подсвечиваем маркер при клике
-        this.setIcon(createHighlightedMarker(point));
-        setTimeout(() => {
-            this.setIcon(icon);
-        }, 2000);
-    });
-    
-    marker.on('mouseover', function() {
-        this.openPopup();
-        this.setIcon(createHighlightedMarker(point));
-    });
-    
-    marker.on('mouseout', function() {
-        this.closePopup();
-        this.setIcon(icon);
-    });
-    
-    return marker;
-}
-
-function createHighlightedMarker(point) {
-    const color = getStatusColor(point.status);
-    const statusIcon = getStatusIcon(point.status);
-    const size = CONFIG.MARKERS.hoverSize;
-    
-    return L.divIcon({
-        html: `
-            <div style="position: relative;">
-                <div style="
-                    background: ${color};
-                    width: ${size}px;
-                    height: ${size}px;
-                    border-radius: 50%;
-                    border: 4px solid white;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: ${['#f1c40f'].includes(color) ? '#2c3e50' : 'white'};
-                    font-weight: bold;
-                    font-size: 16px;
-                    animation: pulse 1s infinite;
-                    z-index: 1000;
-                ">
-                    ${statusIcon}
-                </div>
-                <div style="position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; background: #f39c12; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
-            </div>
-        `,
-        className: 'adts-marker-highlighted',
-        iconSize: [size, size],
-        iconAnchor: [size/2, size]
-    });
-}
-
-function createPopupContent(point) {
-    const normalizedStatus = normalizeADTSStatus(point.status);
-    const color = getStatusColor(point.status);
-    const statusIcon = getStatusIcon(point.status);
-    
-    let displayAddress = point.address || '';
-    if (displayAddress) {
-        displayAddress = displayAddress.replace(/^\d{6},?\s*/, '');
-        displayAddress = displayAddress.replace(/"/g, '');
-        displayAddress = displayAddress.trim();
-    }
-    
-    let accuracyInfo = '';
-    if (point.isMock) {
-        accuracyInfo = `
-            <div style="margin-top: 10px; padding: 8px; background: #f39c12; color: white; border-radius: 6px; font-size: 12px; display: flex; align-items: center; gap: 8px;">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span>Приблизительные координаты</span>
-            </div>
-        `;
-    }
-    
-    const statusInfo = normalizedStatus === 'Не указан' ? 
-        `<span style="color: #95a5a6;">Не указан</span>` :
-        `<span style="color: ${color}; font-weight: 600; background: ${color}20; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 5px;">
-            ${statusIcon} ${normalizedStatus}
-        </span>`;
-    
-    return `
-        <div style="min-width: 280px; max-width: ${CONFIG.MARKERS.popupMaxWidth}px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-            <h4 style="margin: 0 0 12px 0; color: #2c3e50; border-bottom: 3px solid ${color}; padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between;">
-                <span>${point.name || 'Без названия'}</span>
-                <span style="font-size: 12px; color: #7f8c8d;">ADTS</span>
-            </h4>
-            
-            <div style="margin-bottom: 15px;">
-                <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 5px;">Статус:</div>
-                <div style="font-size: 14px;">${statusInfo}</div>
-            </div>
-            
-            ${displayAddress ? `
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 5px;">
-                        <i class="fas fa-map-marker-alt"></i> Адрес:
-                    </div>
-                    <div style="font-size: 14px; line-height: 1.4;">${displayAddress}</div>
-                </div>
-            ` : ''}
-            
-            ${point.region ? `
-                <div style="margin-bottom: 12px;">
-                    <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 5px;">
-                        <i class="fas fa-globe"></i> Регион:
-                    </div>
-                    <div style="font-size: 14px;">${point.region}</div>
-                </div>
-            ` : ''}
-            
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 15px;">
-                ${point.project ? `
-                    <div>
-                        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 3px;">Проект:</div>
-                        <div style="font-size: 13px; font-weight: 500;">${point.project}</div>
-                    </div>
-                ` : ''}
-                
-                ${point.manager ? `
-                    <div>
-                        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 3px;">Менеджер:</div>
-                        <div style="font-size: 13px;">${point.manager}</div>
-                    </div>
-                ` : ''}
-                
-                ${point.contractor ? `
-                    <div>
-                        <div style="font-size: 12px; color: #7f8c8d; margin-bottom: 3px;">Подрядчик:</div>
-                        <div style="font-size: 13px;">${point.contractor}</div>
-                    </div>
-                ` : ''}
-            </div>
-            
-            ${point.lat && point.lng ? `
-                <div style="margin-top: 15px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 11px; color: #6c757d;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <span><i class="fas fa-crosshairs"></i> Координаты:</span>
-                        <span>${point.lat.toFixed(6)}, ${point.lng.toFixed(6)}</span>
-                    </div>
-                </div>
-            ` : ''}
-            
-            ${accuracyInfo}
-            
-            <div style="margin-top: 10px; font-size: 10px; color: #95a5a6; text-align: right;">
-                ID: ${point.id.substring(0, 8)}...
-            </div>
-        </div>
-    `;
-}
-
-// ========== ФИЛЬТРАЦИЯ ==========
+// ========== ФИЛЬТРАЦИЯ С УЧЕТОМ ЛИСТОВ ==========
 
 function updateFilters() {
-    console.log('Обновляю фильтры ADTS...');
+    console.log('Обновляю фильтры ADTS с учетом листов...');
     
     const filters = {
         projects: new Set(),
         regions: new Set(),
         statuses: new Set(),
-        managers: new Set()
+        managers: new Set(),
+        sheets: new Set() // Добавляем фильтр по листам
     };
     
     allPoints.forEach(point => {
@@ -1116,6 +934,7 @@ function updateFilters() {
         if (normalizedStatus && normalizedStatus.trim() !== '') filters.statuses.add(normalizedStatus);
         
         if (point.manager && point.manager.trim() !== '') filters.managers.add(point.manager);
+        if (point.sheet && point.sheet.trim() !== '') filters.sheets.add(point.sheet);
     });
     
     // Сортируем фильтры для удобства
@@ -1124,60 +943,16 @@ function updateFilters() {
     fillFilter('filter-status', Array.from(filters.statuses).sort());
     fillFilter('filter-manager', Array.from(filters.managers).sort());
     
+    // Фильтр по листам обновляем отдельно (он уже есть)
     console.log('Доступные фильтры ADTS:');
     console.log('- Проекты:', Array.from(filters.projects).length);
     console.log('- Регионы:', Array.from(filters.regions).length);
     console.log('- Статусы:', Array.from(filters.statuses));
     console.log('- Менеджеры:', Array.from(filters.managers).length);
+    console.log('- Листы:', Array.from(filters.sheets).length);
     
     // Обновляем подсказки
     updateFilterCounts();
-}
-
-function fillFilter(selectId, options) {
-    const select = document.getElementById(selectId);
-    if (!select) return;
-    
-    const selected = Array.from(select.selectedOptions).map(opt => opt.value);
-    select.innerHTML = '<option value="">Все</option>';
-    
-    // Ограничиваем количество отображаемых опций для производительности
-    const displayOptions = options.slice(0, CONFIG.FILTERS.maxVisibleOptions);
-    
-    displayOptions.forEach(option => {
-        if (option && option.trim() !== '') {
-            const opt = document.createElement('option');
-            opt.value = option;
-            opt.textContent = option;
-            
-            // Для фильтра статусов добавляем цвет
-            if (selectId === 'filter-status') {
-                const color = getStatusColor(option);
-                opt.dataset.color = color;
-                opt.style.color = color;
-                opt.style.fontWeight = '600';
-                
-                // Добавляем иконку статуса
-                const icon = getStatusIcon(option);
-                opt.innerHTML = `${icon} ${option}`;
-            }
-            
-            if (selected.includes(option)) {
-                opt.selected = true;
-            }
-            
-            select.appendChild(opt);
-        }
-    });
-    
-    // Если есть скрытые опции, добавляем информацию
-    if (options.length > CONFIG.FILTERS.maxVisibleOptions) {
-        const hiddenCount = options.length - CONFIG.FILTERS.maxVisibleOptions;
-        const opt = document.createElement('option');
-        opt.disabled = true;
-        opt.textContent = `... и еще ${hiddenCount} опций`;
-        select.appendChild(opt);
-    }
 }
 
 function applyFilters() {
@@ -1187,6 +962,7 @@ function applyFilters() {
     activeFilters.regions = getSelectedValues('filter-region');
     activeFilters.statuses = getSelectedValues('filter-status');
     activeFilters.managers = getSelectedValues('filter-manager');
+    activeFilters.sheets = getSelectedValues('filter-sheets'); // Добавляем фильтр по листам
     
     console.log('Активные фильтры:', activeFilters);
     
@@ -1195,51 +971,14 @@ function applyFilters() {
     showNotification('Фильтры применены', 'success');
 }
 
-function clearFilters() {
-    console.log('Сбрасываю фильтры ADTS...');
-    
-    ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
-        const select = document.getElementById(id);
-        if (select) {
-            select.selectedIndex = 0;
-            // Для множественного выбора сбрасываем все опции
-            if (select.multiple) {
-                Array.from(select.options).forEach(opt => opt.selected = false);
-                if (select.options.length > 0) {
-                    select.options[0].selected = true;
-                }
-            }
-        }
-    });
-    
-    activeFilters = {
-        projects: [],
-        regions: [],
-        statuses: [],
-        managers: []
-    };
-    
-    showPointsOnMap();
-    updateFilterCounts();
-    showNotification('Фильтры сброшены', 'success');
-}
-
-function getSelectedValues(selectId) {
-    const select = document.getElementById(selectId);
-    if (!select) return [];
-    
-    return Array.from(select.selectedOptions)
-        .map(opt => opt.value)
-        .filter(val => val !== '' && !val.includes('... и еще'));
-}
-
 function filterPoints() {
     const filtered = allPoints.filter(point => {
         const filters = [
             { key: 'project', value: point.project, active: activeFilters.projects },
             { key: 'region', value: point.region, active: activeFilters.regions },
             { key: 'status', value: normalizeADTSStatus(point.status), active: activeFilters.statuses },
-            { key: 'manager', value: point.manager, active: activeFilters.managers }
+            { key: 'manager', value: point.manager, active: activeFilters.managers },
+            { key: 'sheet', value: point.sheet, active: activeFilters.sheets } // Фильтр по листу
         ];
         
         for (const filter of filters) {
@@ -1689,10 +1428,10 @@ function setupAutoUpdate() {
     }
 }
 
-// ========== ДЕМО-ДАННЫЕ ==========
+// ========== ДЕМО-ДАННЫЕ С ЛИСТАМИ ==========
 
 function showDemoData() {
-    console.log('Показываем демо-данные ADTS...');
+    console.log('Показываем демо-данные ADTS с листами...');
     
     allPoints = [
         {
@@ -1704,6 +1443,7 @@ function showDemoData() {
             manager: 'Иванов И.И.',
             contractor: 'ООО "МонтажСервис"',
             project: 'ADTS Москва 2024',
+            sheet: 'Москва',
             lat: 55.7570,
             lng: 37.6145,
             isMock: false,
@@ -1718,6 +1458,7 @@ function showDemoData() {
             manager: 'Петров П.П.',
             contractor: 'ИП Сидоров',
             project: 'ADTS Подмосковье',
+            sheet: 'Московская область',
             lat: 55.8890,
             lng: 37.4450,
             isMock: false,
@@ -1732,6 +1473,7 @@ function showDemoData() {
             manager: 'Казак Светлана',
             contractor: 'Дмитриев Александр',
             project: 'ADTS Сибирь',
+            sheet: 'Сибирь',
             lat: 53.3481,
             lng: 83.7794,
             isMock: true,
@@ -1746,6 +1488,7 @@ function showDemoData() {
             manager: 'Смирнова Ольга',
             contractor: 'Кузнецов Михаил',
             project: 'ADTS Юг',
+            sheet: 'Юг',
             lat: 45.0355,
             lng: 38.9753,
             isMock: true,
@@ -1760,6 +1503,7 @@ function showDemoData() {
             manager: 'Васильев А.А.',
             contractor: 'Николаев Н.Н.',
             project: 'ADTS Урал',
+            sheet: 'Урал',
             lat: 56.8389,
             lng: 60.6057,
             isMock: true,
@@ -1774,6 +1518,7 @@ function showDemoData() {
             manager: 'Козлова Е.В.',
             contractor: 'ООО "ТехноМонтаж"',
             project: 'ADTS Сибирь',
+            sheet: 'Сибирь',
             lat: 55.0084,
             lng: 82.9357,
             isMock: true,
@@ -1788,6 +1533,7 @@ function showDemoData() {
             manager: 'Алексеев С.С.',
             contractor: 'Петров П.П.',
             project: 'ADTS Юг',
+            sheet: 'Юг',
             lat: 47.2224,
             lng: 39.7189,
             isMock: true,
@@ -1802,6 +1548,7 @@ function showDemoData() {
             manager: 'Галиева А.Р.',
             contractor: 'ИП Хусаинов',
             project: 'ADTS Поволжье',
+            sheet: 'Поволжье',
             lat: 55.7961,
             lng: 49.1064,
             isMock: true,
@@ -1809,8 +1556,24 @@ function showDemoData() {
         }
     ];
     
+    // Добавляем демо-листы
+    availableSheets = [
+        { id: '1', title: 'Москва', gid: '0' },
+        { id: '2', title: 'Московская область', gid: '1' },
+        { id: '3', title: 'Сибирь', gid: '2' },
+        { id: '4', title: 'Юг', gid: '3' },
+        { id: '5', title: 'Урал', gid: '4' },
+        { id: '6', title: 'Поволжье', gid: '5' }
+    ];
+    
     // Определяем динамические настройки для демо-данных
     determineDynamicSettings(allPoints);
+    
+    // Обновляем фильтр листов
+    updateSheetsFilter(availableSheets);
+    
+    // Выбираем все листы по умолчанию
+    selectAllSheets();
     
     updateFilters();
     updateStatistics();
@@ -1820,7 +1583,7 @@ function showDemoData() {
     showPointsOnMap();
     
     updateStatus('Демо-данные ADTS загружены', 'warning');
-    showNotification('Используются демо-данные ADTS', 'warning');
+    showNotification('Используются демо-данные ADTS с листами', 'warning');
 }
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
@@ -2078,6 +1841,9 @@ window.centerMapOnFilteredPoints = centerMapOnFilteredPoints;
 window.updateLegend = updateLegend;
 window.updateFilterCounts = updateFilterCounts;
 window.updateLegendFromApp = updateLegend;
+window.loadAvailableSheets = loadAvailableSheets;
+window.getSelectedSheets = getSelectedSheets;
+window.selectAllSheets = selectAllSheets;
 
 // Инициализация дополнительных обработчиков
 setTimeout(() => {
@@ -2128,7 +1894,7 @@ setTimeout(() => {
     `;
     document.head.appendChild(style);
     
-    console.log('ADTS Карта успешно инициализирована');
+    console.log('ADTS Карта с поддержкой листов успешно инициализирована');
     
     // Добавляем тултипы для элементов интерфейса
     if (CONFIG.UI.enableTooltips) {
