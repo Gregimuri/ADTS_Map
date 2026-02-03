@@ -15,7 +15,7 @@ const CONFIG = {
     
     // Настройки обновления
     UPDATE: {
-        auto: true,
+        auto: false, // Отключаем автообновление для отладки
         interval: 300000,
         showTimer: true,
         enableNotifications: true
@@ -34,8 +34,7 @@ const CONFIG = {
     FILTERS: {
         maxVisibleOptions: 100,
         rememberSelections: true,
-        enableMultiSelect: true,
-        autoDetectSheets: true
+        enableMultiSelect: true
     },
     
     // Настройки интерфейса
@@ -44,19 +43,7 @@ const CONFIG = {
         showLastUpdate: true,
         enableTooltips: true,
         smoothAnimations: true,
-        theme: 'dark',
-        showSheetsSelector: true
-    },
-    
-    // Настройки для работы с листами
-    SHEETS: {
-        enabled: true,
-        autoDetect: true,
-        defaultSheetName: null,
-        excludedSheets: ['README', 'Инструкция', 'Settings', 'Шаблон', 'Template', 'Образец'],
-        includedSheets: [],
-        cacheSheetsInfo: true,
-        cacheDuration: 300000
+        theme: 'dark'
     },
     
     // Настройки столбцов
@@ -69,6 +56,9 @@ const CONFIG = {
         contractor: ['Подрядчик', 'Подрядчик ФИО', 'Исполнитель', 'Contractor'],
         project: ['Проект', 'Название проекта', 'Project']
     },
+    
+    // Список листов для загрузки (если знаете названия)
+    SHEETS_TO_LOAD: ['Москва', 'СПб'],
     
     // Отладка
     DEBUG: {
@@ -100,7 +90,6 @@ function getColumnNames(type) {
 
 function validateConfig() {
     const errors = [];
-    const warnings = [];
     
     if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID.length < 10) {
         errors.push('Неверный SPREADSHEET_ID');
@@ -115,10 +104,7 @@ function validateConfig() {
         return false;
     }
     
-    if (warnings.length > 0) {
-        console.warn('Предупреждения конфигурации:', warnings);
-    }
-    
+    console.log('Конфигурация загружена успешно');
     return true;
 }
 
@@ -127,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (CONFIG.DEBUG.showConsoleMessages) {
         console.group('Конфигурация ADTS Карты');
         console.log('SPREADSHEET_ID:', CONFIG.SPREADSHEET_ID);
-        console.log('Поддержка листов:', CONFIG.SHEETS.enabled);
+        console.log('Листы для загрузки:', CONFIG.SHEETS_TO_LOAD);
         console.log('Уровень логирования:', CONFIG.DEBUG.logLevel);
         console.groupEnd();
     }
