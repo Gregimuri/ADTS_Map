@@ -1075,42 +1075,247 @@ function setupAutoUpdate() {
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
 function getRandomCoordinate(address, region, project) {
-    let baseLat = 55.7558;
+    let baseLat = 55.7558; // Москва по умолчанию
     let baseLng = 37.6173;
     
-    if (region) {
-        const regionLower = region.toLowerCase();
-        
-        if (regionLower.includes('москва')) {
-            baseLat = 55.7558; baseLng = 37.6173;
-        }
-        else if (regionLower.includes('петербург') || regionLower.includes('спб')) {
-            baseLat = 59.9343; baseLng = 30.3351;
-        }
-        else if (regionLower.includes('новосибирск')) {
-            baseLat = 55.0084; baseLng = 82.9357;
-        }
-        else if (regionLower.includes('екатеринбург')) {
-            baseLat = 56.8389; baseLng = 60.6057;
-        }
-        else if (regionLower.includes('казань')) {
-            baseLat = 55.7961; baseLng = 49.1064;
-        }
-        else if (regionLower.includes('нижний')) {
-            baseLat = 56.3269; baseLng = 44.0065;
-        }
-        else if (regionLower.includes('краснодар')) {
-            baseLat = 45.0355; baseLng = 38.9753;
-        }
+    if (!region) {
+        // Добавляем случайное смещение если регион не указан
+        const lat = baseLat + (Math.random() - 0.5) * 10;
+        const lng = baseLng + (Math.random() - 0.5) * 30;
+        return { lat, lng };
     }
     
-    // Добавляем случайное смещение
+    const regionLower = region.toLowerCase().trim();
+    
+    // Крупные города
+    if (regionLower.includes('москва')) {
+        baseLat = 55.7558; baseLng = 37.6173;
+    }
+    else if (regionLower.includes('петербург') || regionLower.includes('спб')) {
+        baseLat = 59.9343; baseLng = 30.3351;
+    }
+    else if (regionLower.includes('новосибирск')) {
+        baseLat = 55.0084; baseLng = 82.9357;
+    }
+    else if (regionLower.includes('екатеринбург')) {
+        baseLat = 56.8389; baseLng = 60.6057;
+    }
+    else if (regionLower.includes('казань')) {
+        baseLat = 55.7961; baseLng = 49.1064;
+    }
+    else if (regionLower.includes('нижний')) {
+        baseLat = 56.3269; baseLng = 44.0065;
+    }
+    else if (regionLower.includes('краснодар') || regionLower.includes('краснодарский')) {
+        baseLat = 45.0355; baseLng = 38.9753;
+    }
+    else if (regionLower.includes('сочи')) {
+        baseLat = 43.5855; baseLng = 39.7231;
+    }
+    
+    // Регионы России
+    else if (regionLower.includes('алтайский')) {
+        baseLat = 52.5186; baseLng = 85.2042; // Барнаул
+    }
+    else if (regionLower.includes('архангельск')) {
+        baseLat = 64.5393; baseLng = 40.5187;
+    }
+    else if (regionLower.includes('астрахан')) {
+        baseLat = 46.3479; baseLng = 48.0336;
+    }
+    else if (regionLower.includes('белгород')) {
+        baseLat = 50.5955; baseLng = 36.5872;
+    }
+    else if (regionLower.includes('брянск')) {
+        baseLat = 53.2420; baseLng = 34.3653;
+    }
+    else if (regionLower.includes('владимир')) {
+        baseLat = 56.1290; baseLng = 40.4066;
+    }
+    else if (regionLower.includes('волгоград')) {
+        baseLat = 48.7071; baseLng = 44.5169;
+    }
+    else if (regionLower.includes('вологод')) {
+        baseLat = 59.2205; baseLng = 39.8915;
+    }
+    else if (regionLower.includes('воронеж')) {
+        baseLat = 51.6615; baseLng = 39.2003;
+    }
+    else if (regionLower.includes('иванов')) {
+        baseLat = 56.9972; baseLng = 40.9714;
+    }
+    else if (regionLower.includes('иркутск')) {
+        baseLat = 52.2864; baseLng = 104.2807;
+    }
+    else if (regionLower.includes('кабардин') || regionLower.includes('балкар')) {
+        baseLat = 43.4853; baseLng = 43.6071; // Нальчик
+    }
+    else if (regionLower.includes('калуж')) {
+        baseLat = 54.5138; baseLng = 36.2612;
+    }
+    else if (regionLower.includes('карачаево') || regionLower.includes('черкесск')) {
+        baseLat = 44.0433; baseLng = 42.8643; // Черкесск
+    }
+    else if (regionLower.includes('карел')) {
+        baseLat = 61.7850; baseLng = 34.3469; // Петрозаводск
+    }
+    else if (regionLower.includes('кемеров') || regionLower.includes('кузбасс')) {
+        baseLat = 55.3547; baseLng = 86.0878; // Кемерово
+    }
+    else if (regionLower.includes('киров')) {
+        baseLat = 58.6035; baseLng = 49.6680;
+    }
+    else if (regionLower.includes('коми')) {
+        baseLat = 61.6688; baseLng = 50.8354; // Сыктывкар
+    }
+    else if (regionLower.includes('костром')) {
+        baseLat = 57.7679; baseLng = 40.9269;
+    }
+    else if (regionLower.includes('красноярск')) {
+        baseLat = 56.0153; baseLng = 92.8932;
+    }
+    else if (regionLower.includes('курган')) {
+        baseLat = 55.4410; baseLng = 65.3411;
+    }
+    else if (regionLower.includes('курск')) {
+        baseLat = 51.7304; baseLng = 36.1926;
+    }
+    else if (regionLower.includes('ленинград')) {
+        baseLat = 59.9386; baseLng = 30.3141;
+    }
+    else if (regionLower.includes('липецк')) {
+        baseLat = 52.6088; baseLng = 39.5992;
+    }
+    else if (regionLower.includes('московская') || regionLower.includes('подмосков')) {
+        baseLat = 55.7539; baseLng = 37.6208;
+    }
+    else if (regionLower.includes('мурманск')) {
+        baseLat = 68.9707; baseLng = 33.0749;
+    }
+    else if (regionLower.includes('нижегород') || regionLower.includes('нижний')) {
+        baseLat = 56.3269; baseLng = 44.0065;
+    }
+    else if (regionLower.includes('новгород')) {
+        baseLat = 58.5228; baseLng = 31.2699;
+    }
+    else if (regionLower.includes('новосибирск')) {
+        baseLat = 55.0084; baseLng = 82.9357;
+    }
+    else if (regionLower.includes('омск')) {
+        baseLat = 54.9893; baseLng = 73.3682;
+    }
+    else if (regionLower.includes('оренбург')) {
+        baseLat = 51.7682; baseLng = 55.0974;
+    }
+    else if (regionLower.includes('орлов')) {
+        baseLat = 52.9671; baseLng = 36.0696;
+    }
+    else if (regionLower.includes('пенз')) {
+        baseLat = 53.1951; baseLng = 45.0183;
+    }
+    else if (regionLower.includes('перм')) {
+        baseLat = 58.0105; baseLng = 56.2294;
+    }
+    else if (regionLower.includes('псков')) {
+        baseLat = 57.8194; baseLng = 28.3318;
+    }
+    else if (regionLower.includes('адыг')) {
+        baseLat = 44.6098; baseLng = 40.1005; // Майкоп
+    }
+    else if (regionLower.includes('башкортостан') || regionLower.includes('уфа')) {
+        baseLat = 54.7351; baseLng = 55.9587;
+    }
+    else if (regionLower.includes('дагестан')) {
+        baseLat = 42.9831; baseLng = 47.5047; // Махачкала
+    }
+    else if (regionLower.includes('марий') || regionLower.includes('йошкар')) {
+        baseLat = 56.6344; baseLng = 47.8999;
+    }
+    else if (regionLower.includes('мордов')) {
+        baseLat = 54.1874; baseLng = 45.1839; // Саранск
+    }
+    else if (regionLower.includes('татарстан') || regionLower.includes('казань')) {
+        baseLat = 55.7961; baseLng = 49.1064;
+    }
+    else if (regionLower.includes('ростов')) {
+        baseLat = 47.2224; baseLng = 39.7189; // Ростов-на-Дону
+    }
+    else if (regionLower.includes('рязан')) {
+        baseLat = 54.6292; baseLng = 39.7369;
+    }
+    else if (regionLower.includes('самар')) {
+        baseLat = 53.1951; baseLng = 50.1069;
+    }
+    else if (regionLower.includes('саратов')) {
+        baseLat = 51.5331; baseLng = 46.0342;
+    }
+    else if (regionLower.includes('свердлов') || regionLower.includes('екатеринбург')) {
+        baseLat = 56.8389; baseLng = 60.6057;
+    }
+    else if (regionLower.includes('северная') || regionLower.includes('осет')) {
+        baseLat = 43.0246; baseLng = 44.6817; // Владикавказ
+    }
+    else if (regionLower.includes('смоленск')) {
+        baseLat = 54.7826; baseLng = 32.0453;
+    }
+    else if (regionLower.includes('ставрополь')) {
+        baseLat = 45.0433; baseLng = 41.9691;
+    }
+    else if (regionLower.includes('тамбов')) {
+        baseLat = 52.7213; baseLng = 41.4523;
+    }
+    else if (regionLower.includes('твер')) {
+        baseLat = 56.8587; baseLng = 35.9176;
+    }
+    else if (regionLower.includes('томск')) {
+        baseLat = 56.4846; baseLng = 84.9476;
+    }
+    else if (regionLower.includes('тульск')) {
+        baseLat = 54.1931; baseLng = 37.6173;
+    }
+    else if (regionLower.includes('тюмен')) {
+        baseLat = 57.1522; baseLng = 65.5272;
+    }
+    else if (regionLower.includes('удмурт') || regionLower.includes('ижевск')) {
+        baseLat = 56.8526; baseLng = 53.2115;
+    }
+    else if (regionLower.includes('ульяновск')) {
+        baseLat = 54.3142; baseLng = 48.4031;
+    }
+    else if (regionLower.includes('хакас')) {
+        baseLat = 53.7224; baseLng = 91.4426; // Абакан
+    }
+    else if (regionLower.includes('хмао') || regionLower.includes('ханты') || regionLower.includes('сургут')) {
+        baseLat = 61.2541; baseLng = 73.3962; // Ханты-Мансийск
+    }
+    else if (regionLower.includes('челябинск')) {
+        baseLat = 55.1599; baseLng = 61.4026;
+    }
+    else if (regionLower.includes('чуваш') || regionLower.includes('чебоксар')) {
+        baseLat = 56.1463; baseLng = 47.2511;
+    }
+    else if (regionLower.includes('янао') || regionLower.includes('ямало')) {
+        baseLat = 66.5299; baseLng = 66.6145; // Салехард
+    }
+    else if (regionLower.includes('ярослав')) {
+        baseLat = 57.6261; baseLng = 39.8845;
+    }
+    else if (regionLower.includes('калмык')) {
+        baseLat = 46.3078; baseLng = 44.2558; // Элиста
+    }
+    else if (regionLower.includes('сочи')) {
+        baseLat = 43.5855; baseLng = 39.7231;
+    }
+    else if (regionLower.includes('крым') || regionLower.includes('севастополь')) {
+        baseLat = 44.9521; baseLng = 34.1024; // Симферополь
+    }
+    
+    // Добавляем случайное смещение в пределах региона
     const lat = baseLat + (Math.random() - 0.5) * 0.5;
-    const lng = baseLng + (Math.random() - 0.5) * 1.0;
+    const lng = baseLng + (Math.random() - 0.5) * 0.8;
     
     return { lat, lng };
 }
-
 // ========== ГЛОБАЛЬНЫЕ ФУНКЦИИ ==========
 
 window.loadData = loadData;
@@ -1139,3 +1344,4 @@ window.filterByStatus = function(status) {
     applyFilters();
     showNotification(`Фильтр по статусу: ${status}`, 'success');
 };
+
