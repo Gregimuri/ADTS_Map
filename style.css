@@ -483,27 +483,6 @@ body {
     display: inline-block;
 }
 
-/* Стили для быстрых фильтров */
-.quick-filter-btn {
-    width: 100%;
-    margin-bottom: 5px;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.quick-filter-btn:hover {
-    transform: translateX(3px);
-    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-}
-
 /* Стили для поиска в сайдбаре */
 .search-sidebar input {
     width: 100%;
@@ -588,55 +567,6 @@ body {
     border: 2px solid white;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
     transition: all 0.3s;
-}
-
-/* Панель быстрых фильтров по статусам */
-.quick-status-filters {
-    position: absolute;
-    top: 100px;
-    right: 20px;
-    z-index: 1000;
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    max-width: 250px;
-    border: 1px solid rgba(0,0,0,0.1);
-}
-
-.quick-status-filter {
-    width: 100%;
-    margin-bottom: 8px;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.quick-status-filter:hover {
-    transform: translateX(5px);
-    box-shadow: 0 3px 6px rgba(0,0,0,0.2);
-}
-
-.quick-status-filter i {
-    font-size: 14px;
-}
-
-/* Улучшенная панель информации о точке */
-.point-details-status {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 /* Круговые диаграммы для статистики */
@@ -749,11 +679,6 @@ body {
         width: 200px;
         bottom: 10px;
         left: 10px;
-    }
-    
-    .quick-filters {
-        top: 70px;
-        right: 10px;
     }
 }
 
