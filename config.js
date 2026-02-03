@@ -34,7 +34,8 @@ const CONFIG = {
     FILTERS: {
         maxVisibleOptions: 100,
         rememberSelections: true,
-        enableMultiSelect: true
+        enableMultiSelect: true,
+        autoDetectSheets: true // Автоматически определять листы
     },
     
     // Настройки интерфейса
@@ -43,7 +44,8 @@ const CONFIG = {
         showLastUpdate: true,
         enableTooltips: true,
         smoothAnimations: true,
-        theme: 'dark'
+        theme: 'dark',
+        showSheetsSelector: true // Показывать селектор листов
     },
     
     // Настройки экспорта
@@ -51,6 +53,16 @@ const CONFIG = {
         enableCSV: true,
         enableJSON: false,
         maxPointsPerExport: 10000
+    },
+    
+    // Настройки для работы с несколькими листами
+    SHEETS: {
+        enabled: true, // Включить поддержку нескольких листов
+        autoDetect: true, // Автоматически определять листы
+        defaultSheetName: null, // Имя листа по умолчанию (null = все листы)
+        excludedSheets: ['README', 'Инструкция', 'Settings'], // Листы для исключения
+        cacheSheetsInfo: true, // Кэшировать информацию о листах
+        cacheDuration: 300000 // 5 минут
     },
     
     // Отладка
@@ -109,6 +121,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('SPREADSHEET_ID:', CONFIG.SPREADSHEET_ID);
         console.log('Центр карты:', CONFIG.MAP.center);
         console.log('Автообновление:', CONFIG.UPDATE.auto ? `Каждые ${CONFIG.UPDATE.interval/1000} сек` : 'Отключено');
+        console.log('Поддержка листов:', CONFIG.SHEETS.enabled ? 'Включена' : 'Выключена');
         console.log('Уровень логирования:', CONFIG.DEBUG.logLevel);
         console.groupEnd();
     }
