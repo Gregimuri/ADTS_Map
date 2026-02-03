@@ -1,7 +1,7 @@
 // Конфигурация приложения ADTS
 const CONFIG = {
-    // ID вашей Google Таблицы
-    SPREADSHEET_ID: '1BItr9-Q8qnN0S05sMh1YLMqCCfXuNm1E88dvpGkVNU0',
+    // ID вашей Google Таблицы - ВАШ АКТУАЛЬНЫЙ ID
+    SPREADSHEET_ID: 'ВАШ_ТЕКУЩИЙ_SPREADSHEET_ID',
     
     // Настройки карты
     MAP: {
@@ -35,7 +35,7 @@ const CONFIG = {
         maxVisibleOptions: 100,
         rememberSelections: true,
         enableMultiSelect: true,
-        autoDetectSheets: true // Автоматически определять листы
+        autoDetectSheets: true
     },
     
     // Настройки интерфейса
@@ -45,60 +45,47 @@ const CONFIG = {
         enableTooltips: true,
         smoothAnimations: true,
         theme: 'dark',
-        showSheetsSelector: true // Показывать селектор листов
+        showSheetsSelector: true,
+        showProjectFilter: true,
+        showRegionFilter: true,
+        showManagerFilter: true
     },
     
-    // Настройки экспорта
-    EXPORT: {
-        enableCSV: true,
-        enableJSON: false,
-        maxPointsPerExport: 10000
-    },
-    
-    // Настройки для работы с несколькими листами
+    // Настройки для работы с листами
     SHEETS: {
-        enabled: true, // Включить поддержку нескольких листов
-        autoDetect: true, // Автоматически определять листы
-        defaultSheetName: null, // Имя листа по умолчанию (null = все листы)
-        excludedSheets: ['README', 'Инструкция', 'Settings'], // Листы для исключения
-        cacheSheetsInfo: true, // Кэшировать информацию о листах
-        cacheDuration: 300000 // 5 минут
+        enabled: true,
+        autoDetect: true,
+        defaultSheetName: null,
+        // Листы которые нужно исключить (указывайте названия своих листов)
+        excludedSheets: ['README', 'Инструкция', 'Settings', 'Шаблон', 'Template', 'Образец'],
+        // Листы которые нужно обязательно включить (если знаете названия)
+        includedSheets: [], // ['Москва', 'СПб', 'Регионы'] - укажите свои
+        cacheSheetsInfo: true,
+        cacheDuration: 300000
+    },
+    
+    // Настройки столбцов (для разных листов могут быть разные названия)
+    COLUMN_NAMES: {
+        name: ['Название', 'Точка', 'ТТ', 'Магазин', 'Name', 'Point'],
+        region: ['Регион', 'Область', 'Город', 'Region', 'City'],
+        address: ['Адрес', 'Адрес ТТ', 'Местоположение', 'Address', 'Location'],
+        status: ['Статус', 'Статус монтажа', 'Состояние', 'Status'],
+        manager: ['Менеджер', 'Ответственный', 'Менеджер проекта', 'Manager'],
+        contractor: ['Подрядчик', 'Исполнитель', 'Контрагент', 'Contractor'],
+        project: ['Проект', 'Название проекта', 'Project']
     },
     
     // Отладка
     DEBUG: {
-        logLevel: 'info', // 'debug', 'info', 'warn', 'error'
+        logLevel: 'debug', // Измените на 'info' для меньшего количества логов
         showConsoleMessages: true,
-        enablePerformanceTracking: true
+        enablePerformanceTracking: true,
+        logSheetData: true, // Логировать данные с листов
+        showRawData: false  // Показывать сырые данные в консоли
     }
 };
 
-// Проверка конфигурации
-function validateConfig() {
-    const errors = [];
-    
-    if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID.length < 10) {
-        errors.push('Неверный SPREADSHEET_ID');
-    }
-    
-    if (!CONFIG.MAP.center || !Array.isArray(CONFIG.MAP.center) || CONFIG.MAP.center.length !== 2) {
-        errors.push('Неверный формат MAP.center');
-    }
-    
-    if (CONFIG.UPDATE.interval < 60000) {
-        console.warn('Интервал обновления слишком мал (рекомендуется не менее 60000 мс)');
-    }
-    
-    if (errors.length > 0) {
-        console.error('Ошибки в конфигурации:', errors);
-        return false;
-    }
-    
-    console.log('Конфигурация загружена успешно');
-    return true;
-}
-
-// Функция для получения настроек по ключу с значением по умолчанию
+// Функция для получения настроек по ключу
 function getConfig(key, defaultValue = null) {
     const keys = key.split('.');
     let value = CONFIG;
@@ -114,14 +101,49 @@ function getConfig(key, defaultValue = null) {
     return value !== undefined ? value : defaultValue;
 }
 
-// Инициализация конфигурации при загрузке
+// Функция для получения названий столбцов
+function getColumnNames(type) {
+    return CONFIG.COLUMN_NAMES[type] || [type];
+}
+
+// Валидация конфигурации
+function validateConfig() {
+    const errors = [];
+    const warnings = [];
+    
+    if (!CONFIG.SPREADSHEET_ID || CONFIG.SPREADSHEET_ID === 'ВАШ_ТЕКУЩИЙ_SPREADSHEET_ID') {
+        errors.push('Не указан SPREADSHEET_ID. Замените "ВАШ_ТЕКУЩИЙ_SPREADSHEET_ID" на реальный ID вашей таблицы.');
+    }
+    
+    if (!CONFIG.MAP.center || !Array.isArray(CONFIG.MAP.center) || CONFIG.MAP.center.length !== 2) {
+        errors.push('Неверный формат MAP.center');
+    }
+    
+    if (CONFIG.SHEETS.excludedSheets.length === 0) {
+        warnings.push('Нет исключенных листов. Рекомендуется указать системные листы в excludedSheets.');
+    }
+    
+    if (errors.length > 0) {
+        console.error('Критические ошибки в конфигурации:', errors);
+        alert('Ошибка конфигурации: ' + errors.join(', '));
+        return false;
+    }
+    
+    if (warnings.length > 0) {
+        console.warn('Предупреждения конфигурации:', warnings);
+    }
+    
+    console.log('Конфигурация загружена успешно');
+    return true;
+}
+
+// Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
     if (CONFIG.DEBUG.showConsoleMessages) {
-        console.group('Конфигурация ADTS Карты');
+        console.group('=== КОНФИГУРАЦИЯ ADTS КАРТЫ ===');
         console.log('SPREADSHEET_ID:', CONFIG.SPREADSHEET_ID);
-        console.log('Центр карты:', CONFIG.MAP.center);
-        console.log('Автообновление:', CONFIG.UPDATE.auto ? `Каждые ${CONFIG.UPDATE.interval/1000} сек` : 'Отключено');
-        console.log('Поддержка листов:', CONFIG.SHEETS.enabled ? 'Включена' : 'Выключена');
+        console.log('Поддержка листов:', CONFIG.SHEETS.enabled);
+        console.log('Исключаемые листы:', CONFIG.SHEETS.excludedSheets);
         console.log('Уровень логирования:', CONFIG.DEBUG.logLevel);
         console.groupEnd();
     }
@@ -129,8 +151,8 @@ document.addEventListener('DOMContentLoaded', function() {
     validateConfig();
 });
 
-// Экспорт функций
+// Экспорт
 window.CONFIG = CONFIG;
 window.getConfig = getConfig;
+window.getColumnNames = getColumnNames;
 window.validateConfig = validateConfig;
-
