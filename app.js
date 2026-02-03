@@ -6,8 +6,7 @@ let activeFilters = {
     projects: [],
     regions: [],
     statuses: [],
-    managers: [],
-    sheets: []
+    managers: []
 };
 
 let updateInterval;
@@ -15,8 +14,6 @@ let markersMap = new Map();
 let isLoading = false;
 let lastUpdateTime = null;
 let updateTimerInterval = null;
-let availableSheets = [];
-let sheetPointsCache = new Map();
 
 // Цветовая схема статусов ADTS
 const ADTS_STATUS_COLORS = {
@@ -25,28 +22,7 @@ const ADTS_STATUS_COLORS = {
     'В очереди': '#3498db',
     'Первичный': '#f1c40f',
     'Финальный': '#9b59b6',
-    'Доработка': '#95a5a6',
-    'Выполнено': '#2ecc71',
-    'Сдан': '#2ecc71',
-    'Готов': '#2ecc71',
-    'Завершен': '#2ecc71',
-    'Нет оборудывания': '#e74c3c',
-    'Оборудования нет': '#e74c3c',
-    'Ожидание оборудования': '#e74c3c',
-    'Очередь': '#3498db',
-    'В работе': '#3498db',
-    'План': '#3498db',
-    'Запланирован': '#3498db',
-    'Первичный монтаж': '#f1c40f',
-    'Начальный': '#f1c40f',
-    'Подготовка': '#f1c40f',
-    'Финальный монтаж': '#9b59b6',
-    'Завершение': '#9b59b6',
-    'Окончательный': '#9b59b6',
-    'Доработка после монтажа': '#95a5a6',
-    'Реконструкция': '#95a5a6',
-    'Переделка': '#95a5a6',
-    'Ремонт': '#95a5a6'
+    'Доработка': '#95a5a6'
 };
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
@@ -55,7 +31,7 @@ function initApp() {
     console.log('Инициализация приложения ADTS...');
     initMap();
     setupEventListeners();
-    loadAvailableSheets();
+    loadData(); // Сразу загружаем данные
     setupAutoUpdate();
     startUpdateTimer();
 }
@@ -70,11 +46,14 @@ function setupEventListeners() {
         if (e.key === 'Enter') searchPointsSidebar();
     });
     
-    // Кнопки
-    document.getElementById('search-sidebar')?.nextElementSibling?.addEventListener('click', searchPointsSidebar);
+    // Кнопка поиска в сайдбаре
+    const sidebarSearchBtn = document.querySelector('.search-sidebar button');
+    if (sidebarSearchBtn) {
+        sidebarSearchBtn.addEventListener('click', searchPointsSidebar);
+    }
     
     // Фильтры
-    ['filter-sheets', 'filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
+    ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', () => {
             updateFilterCounts();
             updateLegend();
@@ -282,97 +261,6 @@ function getStatusColor(status) {
     return ADTS_STATUS_COLORS[normalized] || '#95a5a6';
 }
 
-// ========== РАБОТА С ЛИСТАМИ ==========
-
-async function loadAvailableSheets() {
-    if (!CONFIG.SHEETS.enabled) {
-        console.log('Поддержка листов отключена');
-        loadData();
-        return;
-    }
-    
-    try {
-        console.log('Загружаю информацию о листах...');
-        updateStatus('Получение списка листов...', 'loading');
-        
-        // Используем более простой подход для получения данных
-        const sheetsToTry = ['Магнит ДП, ПЧ', 'Лента'];
-        availableSheets = sheetsToTry.map((title, index) => ({
-            id: index.toString(),
-            title: title,
-            gid: index.toString()
-        }));
-        
-        console.log('Использую стандартные листы:', availableSheets.map(s => s.title));
-        
-        updateSheetsFilter(availableSheets);
-        
-        if (availableSheets.length > 0) {
-            loadData();
-        }
-        
-        updateStatus(`Найдено ${availableSheets.length} листов`, 'success');
-        
-    } catch (error) {
-        console.error('Ошибка загрузки листов:', error);
-        updateStatus('Ошибка загрузки листов', 'error');
-        showNotification('Использую стандартные листы', 'warning');
-        
-        // Создаем стандартные листы
-        availableSheets = [
-            { id: '1', title: 'Москва', gid: '0' },
-            { id: '2', title: 'СПб', gid: '1' }
-        ];
-        
-        updateSheetsFilter(availableSheets);
-        loadData();
-    }
-}
-
-function updateSheetsFilter(sheets) {
-    const sheetSelect = document.getElementById('filter-sheets');
-    if (!sheetSelect) return;
-    
-    const selectedValues = getSelectedSheets();
-    sheetSelect.innerHTML = '<option value="">Все листы</option>';
-    
-    sheets.forEach(sheet => {
-        const option = document.createElement('option');
-        option.value = sheet.title;
-        option.textContent = sheet.title;
-        
-        if (selectedValues.includes(sheet.title) || selectedValues.length === 0) {
-            option.selected = true;
-        }
-        
-        sheetSelect.appendChild(option);
-    });
-    
-    updateFilterCounts();
-}
-
-function getSelectedSheets() {
-    const sheetSelect = document.getElementById('filter-sheets');
-    if (!sheetSelect) return [];
-    
-    return Array.from(sheetSelect.selectedOptions)
-        .map(opt => opt.value)
-        .filter(val => val !== '');
-}
-
-function selectAllSheets() {
-    const sheetSelect = document.getElementById('filter-sheets');
-    if (!sheetSelect) return;
-    
-    Array.from(sheetSelect.options).forEach(option => {
-        if (option.value !== '') {
-            option.selected = true;
-        }
-    });
-    
-    activeFilters.sheets = availableSheets.map(s => s.title);
-}
-
 // ========== ЗАГРУЗКА ДАННЫХ ==========
 
 async function loadData() {
@@ -394,46 +282,34 @@ async function loadData() {
         
         let allData = [];
         
-        if (CONFIG.SHEETS.enabled && availableSheets.length > 0) {
-            const selectedSheets = getSelectedSheets();
-            const sheetsToLoad = selectedSheets.length > 0 ? selectedSheets : availableSheets.map(s => s.title);
-            
-            console.log(`Загружаю данные с ${sheetsToLoad.length} листов`);
-            
-            for (const sheetName of sheetsToLoad) {
-                try {
-                    console.log(`Обрабатываю лист: "${sheetName}"`);
-                    
-                    if (sheetPointsCache.has(sheetName)) {
-                        const cachedPoints = sheetPointsCache.get(sheetName);
-                        allData = allData.concat(cachedPoints);
-                        continue;
-                    }
-                    
-                    const sheetData = await loadSheetData(sheetName);
-                    
-                    if (!sheetData || sheetData.length === 0) {
-                        console.warn(`Лист "${sheetName}" пуст или не содержит данных`);
-                        continue;
-                    }
-                    
-                    console.log(`Лист "${sheetName}": ${sheetData.length} строк`);
-                    
-                    const processedPoints = processData(sheetData, sheetName);
-                    console.log(`Лист "${sheetName}" обработан: ${processedPoints.length} точек`);
-                    
-                    const pointsWithCoords = await addCoordinatesFast(processedPoints);
-                    sheetPointsCache.set(sheetName, pointsWithCoords);
-                    allData = allData.concat(pointsWithCoords);
-                    
-                } catch (sheetError) {
-                    console.error(`Ошибка обработки листа "${sheetName}":`, sheetError);
+        // Загружаем данные со всех указанных листов
+        for (const sheetName of CONFIG.SHEETS_TO_LOAD) {
+            try {
+                console.log(`Загружаю лист: "${sheetName}"`);
+                
+                const sheetData = await loadSheetData(sheetName);
+                
+                if (!sheetData || sheetData.length === 0) {
+                    console.warn(`Лист "${sheetName}" пуст или не содержит данных`);
+                    continue;
                 }
+                
+                console.log(`Лист "${sheetName}": ${sheetData.length} строк`);
+                
+                const processedPoints = processData(sheetData, sheetName);
+                console.log(`Лист "${sheetName}" обработан: ${processedPoints.length} точек`);
+                
+                const pointsWithCoords = await addCoordinatesFast(processedPoints);
+                allData = allData.concat(pointsWithCoords);
+                
+            } catch (sheetError) {
+                console.error(`Ошибка обработки листа "${sheetName}":`, sheetError);
+                showNotification(`Ошибка загрузки листа "${sheetName}"`, 'warning');
             }
         }
         
         if (allData.length === 0) {
-            throw new Error('Не удалось загрузить данные');
+            throw new Error('Не удалось загрузить данные ни с одного листа');
         }
         
         console.log(`Всего загружено: ${allData.length} точек`);
@@ -453,12 +329,7 @@ async function loadData() {
     } catch (error) {
         console.error('Ошибка загрузки:', error);
         updateStatus('Ошибка загрузки', 'error');
-        
-        if (allPoints.length === 0) {
-            showNotification('Не удалось загрузить данные', 'error');
-        } else {
-            showNotification('Ошибка обновления данных', 'warning');
-        }
+        showNotification('Не удалось загрузить данные', 'error');
         
     } finally {
         isLoading = false;
@@ -473,7 +344,7 @@ async function loadSheetData(sheetName) {
     const url = `https://docs.google.com/spreadsheets/d/${CONFIG.SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
     
     try {
-        console.log(`Пробую URL: ${url}`);
+        console.log(`Загружаю: ${url}`);
         const response = await fetch(url);
         
         if (!response.ok) {
@@ -550,6 +421,8 @@ function processData(rows, sheetName = '') {
     
     const columnIndices = detectColumnIndices(headers);
     
+    console.log(`Столбцы для листа "${sheetName}":`, columnIndices);
+    
     for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
         if (!row || row.length === 0) continue;
@@ -588,6 +461,7 @@ function detectColumnIndices(headers) {
             
             if (index !== -1) {
                 indices[type] = index;
+                console.log(`✓ Столбец "${type}" найден как "${headers[index]}"`);
                 break;
             }
         }
@@ -610,7 +484,6 @@ function createPoint(row, indices, sheetName, rowIndex) {
     
     const point = {
         id: `point_${sheetName}_${rowIndex}_${Date.now()}`,
-        sheetRow: rowIndex + 1,
         sheet: sheetName,
         name: getValue('name'),
         region: getValue('region'),
@@ -618,7 +491,7 @@ function createPoint(row, indices, sheetName, rowIndex) {
         status: getValue('status'),
         manager: getValue('manager'),
         contractor: getValue('contractor'),
-        project: getValue('project') || sheetName
+        project: getValue('project') || sheetName // Используем название листа как проект
     };
     
     // Нормализуем статус
@@ -653,7 +526,7 @@ function cleanString(str) {
 async function addCoordinatesFast(points) {
     return points.map(point => {
         if (!point.lat || !point.lng) {
-            const coords = getRandomCoordinate(point.address, point.region, point.sheet);
+            const coords = getRandomCoordinate(point.address, point.region, point.project);
             return {
                 ...point,
                 lat: coords.lat,
@@ -685,6 +558,7 @@ function showPointsOnMap() {
     updateStatistics();
     updateStatusStatistics();
     updateFilterCounts();
+    updateLegend();
     
     // Центрируем карту
     if (filteredPoints.length > 0) {
@@ -760,9 +634,24 @@ function createPopupContent(point) {
                 </div>
             ` : ''}
             
-            ${point.sheet ? `
-                <div style="font-size: 11px; color: #3498db; margin-top: 10px;">
-                    <i class="fas fa-file-alt"></i> Лист: ${point.sheet}
+            ${point.project ? `
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 12px; color: #7f8c8d;">Проект:</div>
+                    <div style="color: #3498db; font-weight: bold;">${point.project}</div>
+                </div>
+            ` : ''}
+            
+            ${point.region ? `
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 12px; color: #7f8c8d;">Регион:</div>
+                    <div>${point.region}</div>
+                </div>
+            ` : ''}
+            
+            ${point.manager ? `
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 12px; color: #7f8c8d;">Менеджер:</div>
+                    <div>${point.manager}</div>
                 </div>
             ` : ''}
         </div>
@@ -776,8 +665,7 @@ function updateFilters() {
         projects: new Set(),
         regions: new Set(),
         statuses: new Set(),
-        managers: new Set(),
-        sheets: new Set()
+        managers: new Set()
     };
     
     allPoints.forEach(point => {
@@ -785,7 +673,6 @@ function updateFilters() {
         if (point.region) filters.regions.add(point.region);
         if (point.status) filters.statuses.add(normalizeADTSStatus(point.status));
         if (point.manager) filters.managers.add(point.manager);
-        if (point.sheet) filters.sheets.add(point.sheet);
     });
     
     fillFilter('filter-project', Array.from(filters.projects).sort());
@@ -794,6 +681,10 @@ function updateFilters() {
     fillFilter('filter-manager', Array.from(filters.managers).sort());
     
     console.log('Фильтры обновлены');
+    console.log('- Проектов:', filters.projects.size);
+    console.log('- Регионов:', filters.regions.size);
+    console.log('- Статусов:', filters.statuses.size);
+    console.log('- Менеджеров:', filters.managers.size);
 }
 
 function fillFilter(selectId, options) {
@@ -825,7 +716,8 @@ function applyFilters() {
     activeFilters.regions = getSelectedValues('filter-region');
     activeFilters.statuses = getSelectedValues('filter-status');
     activeFilters.managers = getSelectedValues('filter-manager');
-    activeFilters.sheets = getSelectedValues('filter-sheets');
+    
+    console.log('Активные фильтры:', activeFilters);
     
     showPointsOnMap();
     showNotification('Фильтры применены', 'success');
@@ -834,7 +726,7 @@ function applyFilters() {
 function clearFilters() {
     console.log('Сбрасываю фильтры...');
     
-    ['filter-sheets', 'filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
+    ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
         const select = document.getElementById(id);
         if (select) {
             Array.from(select.options).forEach(opt => opt.selected = false);
@@ -848,8 +740,7 @@ function clearFilters() {
         projects: [],
         regions: [],
         statuses: [],
-        managers: [],
-        sheets: []
+        managers: []
     };
     
     showPointsOnMap();
@@ -867,18 +758,17 @@ function getSelectedValues(selectId) {
 
 function filterPoints() {
     return allPoints.filter(point => {
-        if (activeFilters.sheets.length > 0 && !activeFilters.sheets.includes(point.sheet)) {
-            return false;
-        }
-        
+        // Проверяем фильтр по проектам
         if (activeFilters.projects.length > 0 && !activeFilters.projects.includes(point.project)) {
             return false;
         }
         
+        // Проверяем фильтр по регионам
         if (activeFilters.regions.length > 0 && !activeFilters.regions.includes(point.region)) {
             return false;
         }
         
+        // Проверяем фильтр по статусам
         if (activeFilters.statuses.length > 0) {
             const normalizedStatus = normalizeADTSStatus(point.status);
             if (!activeFilters.statuses.includes(normalizedStatus)) {
@@ -886,6 +776,7 @@ function filterPoints() {
             }
         }
         
+        // Проверяем фильтр по менеджерам
         if (activeFilters.managers.length > 0 && !activeFilters.managers.includes(point.manager)) {
             return false;
         }
@@ -915,7 +806,6 @@ function searchPoints() {
             point.region,
             point.manager,
             point.project,
-            point.sheet,
             point.status
         ];
         
@@ -996,20 +886,34 @@ function showPointDetails(point) {
             ${point.project ? `
                 <p style="margin-bottom: 12px;">
                     <strong style="color: #3498db;">Проект:</strong><br>
-                    <span style="font-size: 14px;">${point.project}</span>
+                    <span style="font-size: 14px; color: #3498db; font-weight: bold;">${point.project}</span>
                 </p>
             ` : ''}
             
-            ${point.sheet ? `
+            ${point.manager ? `
                 <p style="margin-bottom: 12px;">
-                    <strong style="color: #3498db;">Лист:</strong><br>
-                    <span style="font-size: 14px;">${point.sheet}</span>
+                    <strong style="color: #3498db;">Менеджер:</strong><br>
+                    <span style="font-size: 14px;">${point.manager}</span>
+                </p>
+            ` : ''}
+            
+            ${point.contractor ? `
+                <p style="margin-bottom: 12px;">
+                    <strong style="color: #3498db;">Подрядчик:</strong><br>
+                    <span style="font-size: 14px;">${point.contractor}</span>
                 </p>
             ` : ''}
         </div>
+        
+        ${point.isMock ? `
+            <div style="margin-top: 20px; padding: 10px; background: #f39c12; color: white; border-radius: 6px; font-size: 13px;">
+                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
+            </div>
+        ` : ''}
     `;
     
     infoSection.style.display = 'block';
+    infoSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ========== СТАТИСТИКА ==========
@@ -1019,14 +923,14 @@ function updateStatistics() {
     const totalPoints = allPoints.length;
     const shownPoints = filteredPoints.length;
     
-    // Используем безопасные проверки на существование элементов
+    // Обновляем основные счетчики
     const totalElement = document.getElementById('total-points');
     const shownElement = document.getElementById('shown-points');
     const accuracyElement = document.getElementById('accuracy-stats');
     const percentageElement = document.getElementById('shown-percentage');
     
-    if (totalElement) totalElement.textContent = totalPoints;
-    if (shownElement) shownElement.textContent = shownPoints;
+    if (totalElement) totalElement.textContent = totalPoints.toLocaleString();
+    if (shownElement) shownElement.textContent = shownPoints.toLocaleString();
     
     // Точные vs приблизительные координаты
     const exactPoints = filteredPoints.filter(p => !p.isMock).length;
@@ -1052,7 +956,7 @@ function updateStatusStatistics() {
         statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
     
-    // Обновляем счетчики в легенде, если элементы существуют
+    // Обновляем счетчики в легенде
     const statusElements = {
         'Выполнен': 'count-completed',
         'Нет оборудования': 'count-no-equipment',
@@ -1066,21 +970,20 @@ function updateStatusStatistics() {
         const elementId = statusElements[status];
         const element = document.getElementById(elementId);
         if (element) {
-            element.textContent = statusCounts[status] || 0;
+            element.textContent = (statusCounts[status] || 0).toLocaleString();
         }
     });
 }
 
 function updateFilterCounts() {
     const filters = [
-        { id: 'filter-sheets', countId: 'sheets-count' },
-        { id: 'filter-project', countId: 'project-count' },
-        { id: 'filter-region', countId: 'region-count' },
-        { id: 'filter-status', countId: 'status-count' },
-        { id: 'filter-manager', countId: 'manager-count' }
+        { id: 'filter-project', countId: 'project-count', label: 'проектов' },
+        { id: 'filter-region', countId: 'region-count', label: 'регионов' },
+        { id: 'filter-status', countId: 'status-count', label: 'статусов' },
+        { id: 'filter-manager', countId: 'manager-count', label: 'менеджеров' }
     ];
     
-    filters.forEach(({ id, countId }) => {
+    filters.forEach(({ id, countId, label }) => {
         const select = document.getElementById(id);
         const countElement = document.getElementById(countId);
         
@@ -1089,9 +992,9 @@ function updateFilterCounts() {
             const total = select.options.length - 1;
             
             if (selected === 0) {
-                countElement.textContent = `Все (${total})`;
+                countElement.textContent = `Все ${label} (${total})`;
             } else {
-                countElement.textContent = `${selected} выбрано`;
+                countElement.textContent = `${selected} из ${total} ${label}`;
             }
         }
     });
@@ -1171,7 +1074,7 @@ function setupAutoUpdate() {
 
 // ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 
-function getRandomCoordinate(address, region, sheetName) {
+function getRandomCoordinate(address, region, project) {
     let baseLat = 55.7558;
     let baseLng = 37.6173;
     
@@ -1190,10 +1093,20 @@ function getRandomCoordinate(address, region, sheetName) {
         else if (regionLower.includes('екатеринбург')) {
             baseLat = 56.8389; baseLng = 60.6057;
         }
+        else if (regionLower.includes('казань')) {
+            baseLat = 55.7961; baseLng = 49.1064;
+        }
+        else if (regionLower.includes('нижний')) {
+            baseLat = 56.3269; baseLng = 44.0065;
+        }
+        else if (regionLower.includes('краснодар')) {
+            baseLat = 45.0355; baseLng = 38.9753;
+        }
     }
     
-    const lat = baseLat + (Math.random() - 0.5) * 0.2;
-    const lng = baseLng + (Math.random() - 0.5) * 0.4;
+    // Добавляем случайное смещение
+    const lat = baseLat + (Math.random() - 0.5) * 0.5;
+    const lng = baseLng + (Math.random() - 0.5) * 1.0;
     
     return { lat, lng };
 }
@@ -1209,49 +1122,20 @@ window.closeModal = closeModal;
 window.centerMap = centerMapOnFilteredPoints;
 window.updateLegend = updateLegend;
 window.updateFilterCounts = updateFilterCounts;
-window.loadAvailableSheets = loadAvailableSheets;
-window.getSelectedSheets = getSelectedSheets;
 
 // Функция для быстрого фильтра по статусу
 window.filterByStatus = function(status) {
     const statusSelect = document.getElementById('filter-status');
     if (!statusSelect) return;
     
+    // Сбрасываем все выборы
+    Array.from(statusSelect.options).forEach(opt => opt.selected = false);
+    
+    // Выбираем нужный статус
     Array.from(statusSelect.options).forEach(opt => {
-        opt.selected = opt.value === status;
+        if (opt.value === status) opt.selected = true;
     });
     
     applyFilters();
     showNotification(`Фильтр по статусу: ${status}`, 'success');
 };
-
-// Добавляем CSS
-document.addEventListener('DOMContentLoaded', function() {
-    const style = document.createElement('style');
-    style.textContent = `
-        .custom-marker:hover {
-            transform: scale(1.2);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            z-index: 1000;
-        }
-        
-        .legend-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            padding: 8px 10px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .legend-item:hover {
-            background: rgba(255,255,255,0.3);
-            transform: translateX(5px);
-        }
-    `;
-    document.head.appendChild(style);
-});
-
