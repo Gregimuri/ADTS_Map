@@ -126,4 +126,3 @@ window.CONFIG = CONFIG;
 window.getConfig = getConfig;
 window.getColumnNames = getColumnNames;
 window.validateConfig = validateConfig;
-
