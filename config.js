@@ -57,8 +57,8 @@ const CONFIG = {
         project: ['Проект', 'Название проекта', 'Project']
     },
     
-    // Список листов для загрузки (если знаете названия)
-    SHEETS_TO_LOAD: ['Магнит ДП, ПЧ', 'Лента'],
+    // Список листов для загрузки
+    SHEETS_TO_LOAD: ['Магнит ДП, ПЧ', 'Лента', 'Магнит-Аптеки', 'Фасоль'],
     
     // Отладка
     DEBUG: {
@@ -126,3 +126,4 @@ window.CONFIG = CONFIG;
 window.getConfig = getConfig;
 window.getColumnNames = getColumnNames;
 window.validateConfig = validateConfig;
+
