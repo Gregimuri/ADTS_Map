@@ -15,14 +15,14 @@ let isLoading = false;
 let lastUpdateTime = null;
 let updateTimerInterval = null;
 
-// Цветовая схема статусов ADTS
+// Цветовая схема статусов ADTS - ОБНОВЛЕНО
 const ADTS_STATUS_COLORS = {
-    'Выполнен': '#2ecc71',
-    'Нет оборудования': '#e74c3c',
-    'В очереди': '#3498db',
-    'Первичный': '#f1c40f',
-    'Финальный': '#9b59b6',
-    'Доработка': '#95a5a6'
+    'Выполнен': '#2ecc71',      // Зеленый
+    'Есть проблемы': '#e74c3c', // Красный
+    'В очереди': '#3498db',     // Синий
+    'Первичный': '#f1c40f',     // Желтый
+    'Финальный': '#9b59b6',     // Фиолетовый
+    'Доработка': '#95a5a6'      // Серый
 };
 
 // ========== ИНИЦИАЛИЗАЦИЯ ==========
@@ -228,9 +228,9 @@ function normalizeADTSStatus(status) {
     
     if (statusLower.includes('выполнен') || statusLower.includes('сдан') || statusLower.includes('готов') || statusLower.includes('завершен')) 
         return 'Выполнен';
-    if (statusLower.includes('нет оборуд') || statusLower.includes('оборудования нет') || statusLower.includes('ожидание')) 
-        return 'Нет оборудования';
-    if (statusLower.includes('очеред') || statusLower.includes('в работе') || statusLower.includes('план') || statusLower.includes('запланирован')) 
+    if (statusLower.includes('есть пробл') || statusLower.includes('проблем') || statusLower.includes('ошибк') || statusLower.includes('неисправность')) 
+        return 'Есть проблемы';
+    if (statusLower.includes('в очеред') || statusLower.includes('очеред') || statusLower.includes('в работе') || statusLower.includes('план') || statusLower.includes('запланирован')) 
         return 'В очереди';
     if (statusLower.includes('первичн') || statusLower.includes('начальн') || statusLower.includes('подготовк')) 
         return 'Первичный';
@@ -247,7 +247,7 @@ function getStatusIcon(status) {
     
     switch(normalized) {
         case 'Выполнен': return '<i class="fas fa-check-circle"></i>';
-        case 'Нет оборудования': return '<i class="fas fa-times-circle"></i>';
+        case 'Есть проблемы': return '<i class="fas fa-exclamation-circle"></i>';
         case 'В очереди': return '<i class="fas fa-clock"></i>';
         case 'Первичный': return '<i class="fas fa-hammer"></i>';
         case 'Финальный': return '<i class="fas fa-check-double"></i>';
@@ -959,7 +959,7 @@ function updateStatusStatistics() {
     // Обновляем счетчики в легенде
     const statusElements = {
         'Выполнен': 'count-completed',
-        'Нет оборудования': 'count-no-equipment',
+        'Есть проблемы': 'count-problems',
         'В очереди': 'count-queue',
         'Первичный': 'count-primary',
         'Финальный': 'count-final',
@@ -1006,7 +1006,7 @@ function updateLegend() {
     
     const statuses = [
         { name: 'Выполнен', color: '#2ecc71', icon: 'check-circle' },
-        { name: 'Нет оборудования', color: '#e74c3c', icon: 'times-circle' },
+        { name: 'Есть проблемы', color: '#e74c3c', icon: 'exclamation-circle' },
         { name: 'В очереди', color: '#3498db', icon: 'clock' },
         { name: 'Первичный', color: '#f1c40f', icon: 'hammer' },
         { name: 'Финальный', color: '#9b59b6', icon: 'check-double' },
@@ -1344,4 +1344,3 @@ window.filterByStatus = function(status) {
     applyFilters();
     showNotification(`Фильтр по статусу: ${status}`, 'success');
 };
-
