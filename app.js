@@ -31,7 +31,7 @@ function initApp() {
     console.log('Инициализация приложения ADTS...');
     initMap();
     setupEventListeners();
-    loadData(); // Сразу загружаем данные
+    loadData();
     setupAutoUpdate();
     startUpdateTimer();
 }
@@ -1344,3 +1344,4 @@ window.filterByStatus = function(status) {
     applyFilters();
     showNotification(`Фильтр по статусу: ${status}`, 'success');
 };
+
