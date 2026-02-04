@@ -535,7 +535,7 @@ body {
 
 /* Стили для статусов ADTS */
 .status-completed { background-color: #2ecc71; color: white; }
-.status-no-equipment { background-color: #e74c3c; color: white; }
+.status-problems { background-color: #e74c3c; color: white; }
 .status-queue { background-color: #3498db; color: white; }
 .status-primary { background-color: #f1c40f; color: #2c3e50; }
 .status-final { background-color: #9b59b6; color: white; }
@@ -547,7 +547,7 @@ body {
     border-color: #27ae60 !important;
 }
 
-.marker-no-equipment {
+.marker-problems {
     background: #e74c3c !important;
     border-color: #c0392b !important;
 }
