@@ -299,7 +299,7 @@ async function loadData() {
                 const processedPoints = processData(sheetData, sheetName);
                 console.log(`Лист "${sheetName}" обработан: ${processedPoints.length} точек`);
                 
-                const pointsWithCoords = await addCoordinatesFast(processedPoints);
+                const pointsWithCoords = await addCoordinates(processedPoints);
                 allData = allData.concat(pointsWithCoords);
                 
             } catch (sheetError) {
@@ -448,7 +448,8 @@ function detectColumnIndices(headers) {
         status: getColumnNames('status'),
         manager: getColumnNames('manager'),
         contractor: getColumnNames('contractor'),
-        project: getColumnNames('project')
+        project: getColumnNames('project'),
+        coordinates: getColumnNames('coordinates')
     };
     
     Object.keys(columnTypes).forEach(type => {
@@ -472,6 +473,7 @@ function detectColumnIndices(headers) {
     if (indices.address === -1 && headers.length > 1) indices.address = 1;
     if (indices.status === -1 && headers.length > 2) indices.status = 2;
     if (indices.region === -1 && headers.length > 3) indices.region = 3;
+    if (indices.coordinates === -1 && headers.length > 4) indices.coordinates = 4;
     
     return indices;
 }
@@ -491,7 +493,8 @@ function createPoint(row, indices, sheetName, rowIndex) {
         status: getValue('status'),
         manager: getValue('manager'),
         contractor: getValue('contractor'),
-        project: getValue('project') || sheetName // Используем название листа как проект
+        project: getValue('project') || sheetName, // Используем название листа как проект
+        coordinates: getValue('coordinates')
     };
     
     // Нормализуем статус
@@ -523,19 +526,82 @@ function cleanString(str) {
         .trim();
 }
 
-async function addCoordinatesFast(points) {
+async function addCoordinates(points) {
     return points.map(point => {
-        if (!point.lat || !point.lng) {
-            const coords = getRandomCoordinate(point.address, point.region, point.project);
-            return {
-                ...point,
-                lat: coords.lat,
-                lng: coords.lng,
-                isMock: true
-            };
+        // Пытаемся извлечь координаты из колонки "Координаты"
+        let lat = null;
+        let lng = null;
+        let isMock = true;
+        let coordinatesSource = 'region';
+        
+        if (point.coordinates) {
+            const coords = parseCoordinates(point.coordinates);
+            if (coords) {
+                lat = coords.lat;
+                lng = coords.lng;
+                isMock = false;
+                coordinatesSource = 'exact';
+            }
         }
-        return { ...point, isMock: false };
+        
+        // Если координат нет или они невалидны, используем случайные по региону
+        if (!lat || !lng) {
+            const randomCoords = getRandomCoordinate(point.address, point.region, point.project);
+            lat = randomCoords.lat;
+            lng = randomCoords.lng;
+            isMock = true;
+            coordinatesSource = 'region';
+        }
+        
+        return {
+            ...point,
+            lat,
+            lng,
+            isMock,
+            coordinatesSource
+        };
     });
+}
+
+function parseCoordinates(coordsString) {
+    if (!coordsString) return null;
+    
+    try {
+        // Убираем лишние пробелы и символы
+        const cleaned = coordsString
+            .replace(/\s+/g, ' ')
+            .replace(/[^\d.,\s-]/g, '')
+            .trim();
+        
+        // Пробуем разные форматы
+        let parts = [];
+        
+        // Формат "52.694825, 81.609021"
+        if (cleaned.includes(',')) {
+            parts = cleaned.split(',').map(p => p.trim());
+        }
+        // Формат "52.694825 81.609021"
+        else if (cleaned.includes(' ')) {
+            parts = cleaned.split(' ').map(p => p.trim());
+        }
+        
+        if (parts.length >= 2) {
+            const lat = parseFloat(parts[0]);
+            const lng = parseFloat(parts[1]);
+            
+            // Проверяем валидность координат
+            if (!isNaN(lat) && !isNaN(lng) && 
+                lat >= -90 && lat <= 90 && 
+                lng >= -180 && lng <= 180) {
+                return { lat, lng };
+            }
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Ошибка парсинга координат:', error);
+        return null;
+    }
 }
 
 // ========== ОТОБРАЖЕНИЕ ТОЧЕК ==========
@@ -571,6 +637,14 @@ function createMarker(point) {
     const color = getStatusColor(status);
     const iconHtml = getStatusIcon(status);
     
+    // Определяем иконку в зависимости от источника координат
+    let coordinateIcon = '';
+    if (point.coordinatesSource === 'exact') {
+        coordinateIcon = '<i class="fas fa-bullseye" style="position: absolute; bottom: -5px; right: -5px; background: #2ecc71; color: white; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; font-size: 8px; display: flex; align-items: center; justify-content: center;"></i>';
+    } else if (point.coordinatesSource === 'region') {
+        coordinateIcon = '<i class="fas fa-location-arrow" style="position: absolute; bottom: -5px; right: -5px; background: #f39c12; color: white; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; font-size: 8px; display: flex; align-items: center; justify-content: center;"></i>';
+    }
+    
     const icon = L.divIcon({
         html: `
             <div style="position: relative;">
@@ -590,7 +664,7 @@ function createMarker(point) {
                 ">
                     ${iconHtml}
                 </div>
-                ${point.isMock ? '<div style="position: absolute; top: -5px; right: -5px; width: 10px; height: 10px; background: #f39c12; border-radius: 50%; border: 2px solid white;"></div>' : ''}
+                ${coordinateIcon}
             </div>
         `,
         className: 'adts-marker',
@@ -616,11 +690,29 @@ function createPopupContent(point) {
     const status = normalizeADTSStatus(point.status);
     const color = getStatusColor(status);
     
+    // Индикатор точности координат
+    let accuracyIndicator = '';
+    if (point.coordinatesSource === 'exact') {
+        accuracyIndicator = `
+            <div style="margin-bottom: 10px; padding: 5px 10px; background: #2ecc71; color: white; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
+                <i class="fas fa-bullseye"></i> Точные координаты
+            </div>
+        `;
+    } else if (point.coordinatesSource === 'region') {
+        accuracyIndicator = `
+            <div style="margin-bottom: 10px; padding: 5px 10px; background: #f39c12; color: white; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
+                <i class="fas fa-location-arrow"></i> Приблизительные координаты
+            </div>
+        `;
+    }
+    
     return `
         <div style="min-width: 250px; font-family: sans-serif;">
             <h4 style="margin: 0 0 10px 0; color: #2c3e50; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
                 ${point.name || 'Точка ADTS'}
             </h4>
+            
+            ${accuracyIndicator}
             
             <div style="margin-bottom: 10px;">
                 <div style="font-size: 12px; color: #7f8c8d;">Статус:</div>
@@ -631,6 +723,13 @@ function createPopupContent(point) {
                 <div style="margin-bottom: 10px;">
                     <div style="font-size: 12px; color: #7f8c8d;">Адрес:</div>
                     <div>${point.address}</div>
+                </div>
+            ` : ''}
+            
+            ${point.coordinates && point.coordinatesSource === 'exact' ? `
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 12px; color: #7f8c8d;">Координаты:</div>
+                    <div style="font-family: monospace; font-size: 12px;">${point.coordinates}</div>
                 </div>
             ` : ''}
             
@@ -806,7 +905,8 @@ function searchPoints() {
             point.region,
             point.manager,
             point.project,
-            point.status
+            point.status,
+            point.coordinates
         ];
         
         return searchFields.some(field => 
@@ -860,6 +960,30 @@ function showPointDetails(point) {
     const status = normalizeADTSStatus(point.status);
     const color = getStatusColor(status);
     
+    // Индикатор точности координат
+    let accuracyIndicator = '';
+    if (point.coordinatesSource === 'exact') {
+        accuracyIndicator = `
+            <div style="margin-bottom: 20px; padding: 10px; background: #2ecc71; color: white; border-radius: 6px; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-bullseye"></i>
+                <div>
+                    <div style="font-weight: bold;">Точные координаты</div>
+                    <div style="font-size: 12px;">Из колонки "Координаты"</div>
+                </div>
+            </div>
+        `;
+    } else {
+        accuracyIndicator = `
+            <div style="margin-bottom: 20px; padding: 10px; background: #f39c12; color: white; border-radius: 6px; display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-location-arrow"></i>
+                <div>
+                    <div style="font-weight: bold;">Приблизительные координаты</div>
+                    <div style="font-size: 12px;">На основе региона "${point.region || 'не указан'}"</div>
+                </div>
+            </div>
+        `;
+    }
+    
     container.innerHTML = `
         <div style="margin-bottom: 20px;">
             <h5 style="color: white; margin-bottom: 10px; font-size: 18px;">${point.name}</h5>
@@ -868,11 +992,20 @@ function showPointDetails(point) {
             </div>
         </div>
         
+        ${accuracyIndicator}
+        
         <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             ${point.address ? `
                 <p style="margin-bottom: 12px;">
                     <strong style="color: #3498db;">Адрес:</strong><br>
                     <span style="font-size: 14px;">${point.address}</span>
+                </p>
+            ` : ''}
+            
+            ${point.coordinates && point.coordinatesSource === 'exact' ? `
+                <p style="margin-bottom: 12px;">
+                    <strong style="color: #3498db;">Координаты:</strong><br>
+                    <span style="font-size: 14px; font-family: monospace;">${point.coordinates}</span>
                 </p>
             ` : ''}
             
@@ -905,11 +1038,9 @@ function showPointDetails(point) {
             ` : ''}
         </div>
         
-        ${point.isMock ? `
-            <div style="margin-top: 20px; padding: 10px; background: #f39c12; color: white; border-radius: 6px; font-size: 13px;">
-                <i class="fas fa-exclamation-triangle"></i> Приблизительные координаты
-            </div>
-        ` : ''}
+        <div style="font-size: 12px; color: #95a5a6; text-align: center;">
+            ID: ${point.id.split('_')[1]}_${point.id.split('_')[2]}
+        </div>
     `;
     
     infoSection.style.display = 'block';
@@ -933,11 +1064,12 @@ function updateStatistics() {
     if (shownElement) shownElement.textContent = shownPoints.toLocaleString();
     
     // Точные vs приблизительные координаты
-    const exactPoints = filteredPoints.filter(p => !p.isMock).length;
-    const approxPoints = filteredPoints.filter(p => p.isMock).length;
+    const exactPoints = filteredPoints.filter(p => p.coordinatesSource === 'exact').length;
+    const approxPoints = filteredPoints.filter(p => p.coordinatesSource === 'region').length;
     
     if (accuracyElement) {
         accuracyElement.textContent = `${exactPoints}/${approxPoints}`;
+        accuracyElement.title = `Точные: ${exactPoints}, Приблизительные: ${approxPoints}`;
     }
     
     // Процент показанных точек
@@ -1032,6 +1164,27 @@ function updateLegend() {
             </div>
         `;
     });
+    
+    // Добавляем легенду для точности координат
+    html += `
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
+            <h5 style="color: #2c3e50; margin-bottom: 10px; font-size: 14px;"><i class="fas fa-crosshairs"></i> Точность координат</h5>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <div style="position: relative; width: 20px; height: 20px;">
+                    <div style="width: 16px; height: 16px; background: #3498db; border-radius: 50%; border: 2px solid white;"></div>
+                    <div style="position: absolute; bottom: -3px; right: -3px; width: 10px; height: 10px; background: #2ecc71; border-radius: 50%; border: 1px solid white;"></div>
+                </div>
+                <span style="font-size: 12px;">Точные координаты</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="position: relative; width: 20px; height: 20px;">
+                    <div style="width: 16px; height: 16px; background: #3498db; border-radius: 50%; border: 2px solid white;"></div>
+                    <div style="position: absolute; bottom: -3px; right: -3px; width: 10px; height: 10px; background: #f39c12; border-radius: 50%; border: 1px solid white;"></div>
+                </div>
+                <span style="font-size: 12px;">Приблизительные координаты</span>
+            </div>
+        </div>
+    `;
     
     container.innerHTML = html;
 }
@@ -1157,7 +1310,7 @@ function getRandomCoordinate(address, region, project) {
         baseLat = 44.0433; baseLng = 42.8643; // Черкесск
     }
     else if (regionLower.includes('карел')) {
-        baseLat = 61.7850; baseLng = 34.3469; // Петрозаводск
+        baseLat = 61.7850; baseLng = 33.0749; // Петрозаводск
     }
     else if (regionLower.includes('кемеров') || regionLower.includes('кузбасс')) {
         baseLat = 55.3547; baseLng = 86.0878; // Кемерово
@@ -1344,4 +1497,3 @@ window.filterByStatus = function(status) {
     applyFilters();
     showNotification(`Фильтр по статусу: ${status}`, 'success');
 };
-
