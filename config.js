@@ -46,7 +46,7 @@ const CONFIG = {
         theme: 'dark'
     },
     
-    // Настройки столбцов
+    // Настройки столбцов - ДОБАВЛЕНА КОЛОНКА КООРДИНАТ
     COLUMN_NAMES: {
         name: ['Название', 'ТТ', 'Магазин', 'Точка', 'Name', 'Название ТТ'],
         region: ['Регион', 'Область', 'Город', 'Region', 'City'],
@@ -54,7 +54,8 @@ const CONFIG = {
         status: ['Статус', 'Статус ТТ', 'Статус монтажа', 'Status'],
         manager: ['Менеджер', 'Менеджер ФИО', 'Ответственный', 'Manager'],
         contractor: ['Подрядчик', 'Подрядчик ФИО', 'Исполнитель', 'Contractor'],
-        project: ['Проект', 'Название проекта', 'Project']
+        project: ['Проект', 'Название проекта', 'Project'],
+        coordinates: ['Координаты', 'LatLng', 'Широта долгота', 'Coordinates', 'Геокоординаты']
     },
     
     // Список листов для загрузки
@@ -126,4 +127,3 @@ window.CONFIG = CONFIG;
 window.getConfig = getConfig;
 window.getColumnNames = getColumnNames;
 window.validateConfig = validateConfig;
-
