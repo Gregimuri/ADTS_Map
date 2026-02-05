@@ -794,3 +794,69 @@ body {
 .sheet-info i {
     font-size: 10px;
 }
+
+/* Стили для индикаторов точности координат */
+.marker-exact-coords::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    background: #2ecc71;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.marker-approx-coords::after {
+    content: '';
+    position: absolute;
+    bottom: -5px;
+    right: -5px;
+    width: 12px;
+    height: 12px;
+    background: #f39c12;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* Стили для статистики точности координат */
+.accuracy-stats-detail {
+    font-size: 11px;
+    color: #3498db;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 3px;
+}
+
+.accuracy-stats-detail i {
+    font-size: 10px;
+}
+
+/* Иконки в попапе для точности координат */
+.popup-accuracy-exact {
+    background: #2ecc71;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+}
+
+.popup-accuracy-approx {
+    background: #f39c12;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+}
