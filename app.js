@@ -15,7 +15,7 @@ let isLoading = false;
 let lastUpdateTime = null;
 let updateTimerInterval = null;
 
-// Цветовая схема статусов ADTS - ОБНОВЛЕНО
+// Цветовая схема статусов ADTS
 const ADTS_STATUS_COLORS = {
     'Выполнен': '#2ecc71',      // Зеленый
     'Есть проблемы': '#e74c3c', // Красный
@@ -56,7 +56,6 @@ function setupEventListeners() {
     ['filter-project', 'filter-region', 'filter-status', 'filter-manager'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', () => {
             updateFilterCounts();
-            updateLegend();
         });
     });
 }
@@ -318,8 +317,6 @@ async function loadData() {
         
         updateFilters();
         updateStatistics();
-        updateStatusStatistics();
-        updateLegend();
         updateLastUpdateTime();
         showPointsOnMap();
         
@@ -531,7 +528,6 @@ async function addCoordinates(points) {
         // Пытаемся извлечь координаты из колонки "Координаты"
         let lat = null;
         let lng = null;
-        let isMock = true;
         let coordinatesSource = 'region';
         
         if (point.coordinates) {
@@ -539,7 +535,6 @@ async function addCoordinates(points) {
             if (coords) {
                 lat = coords.lat;
                 lng = coords.lng;
-                isMock = false;
                 coordinatesSource = 'exact';
             }
         }
@@ -549,7 +544,6 @@ async function addCoordinates(points) {
             const randomCoords = getRandomCoordinate(point.address, point.region, point.project);
             lat = randomCoords.lat;
             lng = randomCoords.lng;
-            isMock = true;
             coordinatesSource = 'region';
         }
         
@@ -557,7 +551,6 @@ async function addCoordinates(points) {
             ...point,
             lat,
             lng,
-            isMock,
             coordinatesSource
         };
     });
@@ -622,9 +615,7 @@ function showPointsOnMap() {
     });
     
     updateStatistics();
-    updateStatusStatistics();
     updateFilterCounts();
-    updateLegend();
     
     // Центрируем карту
     if (filteredPoints.length > 0) {
@@ -636,14 +627,6 @@ function createMarker(point) {
     const status = normalizeADTSStatus(point.status);
     const color = getStatusColor(status);
     const iconHtml = getStatusIcon(status);
-    
-    // Определяем иконку в зависимости от источника координат
-    let coordinateIcon = '';
-    if (point.coordinatesSource === 'exact') {
-        coordinateIcon = '<i class="fas fa-bullseye" style="position: absolute; bottom: -5px; right: -5px; background: #2ecc71; color: white; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; font-size: 8px; display: flex; align-items: center; justify-content: center;"></i>';
-    } else if (point.coordinatesSource === 'region') {
-        coordinateIcon = '<i class="fas fa-location-arrow" style="position: absolute; bottom: -5px; right: -5px; background: #f39c12; color: white; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; font-size: 8px; display: flex; align-items: center; justify-content: center;"></i>';
-    }
     
     const icon = L.divIcon({
         html: `
@@ -664,7 +647,6 @@ function createMarker(point) {
                 ">
                     ${iconHtml}
                 </div>
-                ${coordinateIcon}
             </div>
         `,
         className: 'adts-marker',
@@ -690,29 +672,11 @@ function createPopupContent(point) {
     const status = normalizeADTSStatus(point.status);
     const color = getStatusColor(status);
     
-    // Индикатор точности координат
-    let accuracyIndicator = '';
-    if (point.coordinatesSource === 'exact') {
-        accuracyIndicator = `
-            <div style="margin-bottom: 10px; padding: 5px 10px; background: #2ecc71; color: white; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
-                <i class="fas fa-bullseye"></i> Точные координаты
-            </div>
-        `;
-    } else if (point.coordinatesSource === 'region') {
-        accuracyIndicator = `
-            <div style="margin-bottom: 10px; padding: 5px 10px; background: #f39c12; color: white; border-radius: 4px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px;">
-                <i class="fas fa-location-arrow"></i> Приблизительные координаты
-            </div>
-        `;
-    }
-    
     return `
         <div style="min-width: 250px; font-family: sans-serif;">
             <h4 style="margin: 0 0 10px 0; color: #2c3e50; border-bottom: 2px solid ${color}; padding-bottom: 5px;">
                 ${point.name || 'Точка ADTS'}
             </h4>
-            
-            ${accuracyIndicator}
             
             <div style="margin-bottom: 10px;">
                 <div style="font-size: 12px; color: #7f8c8d;">Статус:</div>
@@ -723,13 +687,6 @@ function createPopupContent(point) {
                 <div style="margin-bottom: 10px;">
                     <div style="font-size: 12px; color: #7f8c8d;">Адрес:</div>
                     <div>${point.address}</div>
-                </div>
-            ` : ''}
-            
-            ${point.coordinates && point.coordinatesSource === 'exact' ? `
-                <div style="margin-bottom: 10px;">
-                    <div style="font-size: 12px; color: #7f8c8d;">Координаты:</div>
-                    <div style="font-family: monospace; font-size: 12px;">${point.coordinates}</div>
                 </div>
             ` : ''}
             
@@ -960,30 +917,6 @@ function showPointDetails(point) {
     const status = normalizeADTSStatus(point.status);
     const color = getStatusColor(status);
     
-    // Индикатор точности координат
-    let accuracyIndicator = '';
-    if (point.coordinatesSource === 'exact') {
-        accuracyIndicator = `
-            <div style="margin-bottom: 20px; padding: 10px; background: #2ecc71; color: white; border-radius: 6px; display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-bullseye"></i>
-                <div>
-                    <div style="font-weight: bold;">Точные координаты</div>
-                    <div style="font-size: 12px;">Из колонки "Координаты"</div>
-                </div>
-            </div>
-        `;
-    } else {
-        accuracyIndicator = `
-            <div style="margin-bottom: 20px; padding: 10px; background: #f39c12; color: white; border-radius: 6px; display: flex; align-items: center; gap: 10px;">
-                <i class="fas fa-location-arrow"></i>
-                <div>
-                    <div style="font-weight: bold;">Приблизительные координаты</div>
-                    <div style="font-size: 12px;">На основе региона "${point.region || 'не указан'}"</div>
-                </div>
-            </div>
-        `;
-    }
-    
     container.innerHTML = `
         <div style="margin-bottom: 20px;">
             <h5 style="color: white; margin-bottom: 10px; font-size: 18px;">${point.name}</h5>
@@ -992,20 +925,11 @@ function showPointDetails(point) {
             </div>
         </div>
         
-        ${accuracyIndicator}
-        
         <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
             ${point.address ? `
                 <p style="margin-bottom: 12px;">
                     <strong style="color: #3498db;">Адрес:</strong><br>
                     <span style="font-size: 14px;">${point.address}</span>
-                </p>
-            ` : ''}
-            
-            ${point.coordinates && point.coordinatesSource === 'exact' ? `
-                <p style="margin-bottom: 12px;">
-                    <strong style="color: #3498db;">Координаты:</strong><br>
-                    <span style="font-size: 14px; font-family: monospace;">${point.coordinates}</span>
                 </p>
             ` : ''}
             
@@ -1057,54 +981,16 @@ function updateStatistics() {
     // Обновляем основные счетчики
     const totalElement = document.getElementById('total-points');
     const shownElement = document.getElementById('shown-points');
-    const accuracyElement = document.getElementById('accuracy-stats');
     const percentageElement = document.getElementById('shown-percentage');
     
     if (totalElement) totalElement.textContent = totalPoints.toLocaleString();
     if (shownElement) shownElement.textContent = shownPoints.toLocaleString();
-    
-    // Точные vs приблизительные координаты
-    const exactPoints = filteredPoints.filter(p => p.coordinatesSource === 'exact').length;
-    const approxPoints = filteredPoints.filter(p => p.coordinatesSource === 'region').length;
-    
-    if (accuracyElement) {
-        accuracyElement.textContent = `${exactPoints}/${approxPoints}`;
-        accuracyElement.title = `Точные: ${exactPoints}, Приблизительные: ${approxPoints}`;
-    }
     
     // Процент показанных точек
     const percentage = totalPoints > 0 ? Math.round((shownPoints / totalPoints) * 100) : 0;
     if (percentageElement) {
         percentageElement.textContent = `${percentage}%`;
     }
-}
-
-function updateStatusStatistics() {
-    const filteredPoints = filterPoints();
-    const statusCounts = {};
-    
-    filteredPoints.forEach(point => {
-        const status = normalizeADTSStatus(point.status);
-        statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
-    
-    // Обновляем счетчики в легенде
-    const statusElements = {
-        'Выполнен': 'count-completed',
-        'Есть проблемы': 'count-problems',
-        'В очереди': 'count-queue',
-        'Первичный': 'count-primary',
-        'Финальный': 'count-final',
-        'Доработка': 'count-rework'
-    };
-    
-    Object.keys(statusElements).forEach(status => {
-        const elementId = statusElements[status];
-        const element = document.getElementById(elementId);
-        if (element) {
-            element.textContent = (statusCounts[status] || 0).toLocaleString();
-        }
-    });
 }
 
 function updateFilterCounts() {
@@ -1130,63 +1016,6 @@ function updateFilterCounts() {
             }
         }
     });
-}
-
-function updateLegend() {
-    const container = document.getElementById('legend');
-    if (!container) return;
-    
-    const statuses = [
-        { name: 'Выполнен', color: '#2ecc71', icon: 'check-circle' },
-        { name: 'Есть проблемы', color: '#e74c3c', icon: 'exclamation-circle' },
-        { name: 'В очереди', color: '#3498db', icon: 'clock' },
-        { name: 'Первичный', color: '#f1c40f', icon: 'hammer' },
-        { name: 'Финальный', color: '#9b59b6', icon: 'check-double' },
-        { name: 'Доработка', color: '#95a5a6', icon: 'tools' }
-    ];
-    
-    const filteredPoints = filterPoints();
-    
-    let html = '<h5 style="color: #2c3e50; margin-bottom: 15px;"><i class="fas fa-palette"></i> Статусы ADTS</h5>';
-    
-    statuses.forEach(status => {
-        const count = filteredPoints.filter(p => 
-            normalizeADTSStatus(p.status) === status.name
-        ).length;
-        
-        html += `
-            <div class="legend-item" onclick="filterByStatus('${status.name}')">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 16px; height: 16px; background: ${status.color}; border-radius: 50%; border: 2px solid white;"></div>
-                    <span>${status.name}</span>
-                </div>
-                <span style="font-size: 12px; color: #7f8c8d;">${count}</span>
-            </div>
-        `;
-    });
-    
-    // Добавляем легенду для точности координат
-    html += `
-        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
-            <h5 style="color: #2c3e50; margin-bottom: 10px; font-size: 14px;"><i class="fas fa-crosshairs"></i> Точность координат</h5>
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                <div style="position: relative; width: 20px; height: 20px;">
-                    <div style="width: 16px; height: 16px; background: #3498db; border-radius: 50%; border: 2px solid white;"></div>
-                    <div style="position: absolute; bottom: -3px; right: -3px; width: 10px; height: 10px; background: #2ecc71; border-radius: 50%; border: 1px solid white;"></div>
-                </div>
-                <span style="font-size: 12px;">Точные координаты</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="position: relative; width: 20px; height: 20px;">
-                    <div style="width: 16px; height: 16px; background: #3498db; border-radius: 50%; border: 2px solid white;"></div>
-                    <div style="position: absolute; bottom: -3px; right: -3px; width: 10px; height: 10px; background: #f39c12; border-radius: 50%; border: 1px solid white;"></div>
-                </div>
-                <span style="font-size: 12px;">Приблизительные координаты</span>
-            </div>
-        </div>
-    `;
-    
-    container.innerHTML = html;
 }
 
 // ========== ЦЕНТРИРОВАНИЕ КАРТЫ ==========
@@ -1478,7 +1307,6 @@ window.searchPoints = searchPoints;
 window.searchPointsSidebar = searchPointsSidebar;
 window.closeModal = closeModal;
 window.centerMap = centerMapOnFilteredPoints;
-window.updateLegend = updateLegend;
 window.updateFilterCounts = updateFilterCounts;
 
 // Функция для быстрого фильтра по статусу
