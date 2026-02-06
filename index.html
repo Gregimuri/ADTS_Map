@@ -52,16 +52,6 @@
                 </div>
                 
                 <div class="stat-item">
-                    <div class="stat-icon-small" style="background: #f39c12;">
-                        <i class="fas fa-bullseye"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-big-number" id="accuracy-stats">0/0</div>
-                        <div class="stat-label-small">ТОЧНОСТЬ</div>
-                    </div>
-                </div>
-                
-                <div class="stat-item">
                     <div class="stat-icon-small" style="background: #9b59b6;">
                         <i class="fas fa-chart-pie"></i>
                     </div>
@@ -155,57 +145,6 @@
                 </div>
                 <div id="point-details"></div>
             </div>
-            
-            <!-- Легенда статусов -->
-            <div class="legend-mini" style="padding: 15px; background: rgba(0,0,0,0.1); margin: 20px; border-radius: 8px;">
-                <h5 style="color: white; margin-bottom: 15px; font-size: 14px;">
-                    <i class="fas fa-palette"></i> Статусы ADTS
-                </h5>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #2ecc71;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Выполнен</span>
-                        </div>
-                        <span id="count-completed" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #e74c3c;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Есть проблемы</span>
-                        </div>
-                        <span id="count-problems" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #3498db;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">В очереди</span>
-                        </div>
-                        <span id="count-queue" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #f1c40f;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Первичный</span>
-                        </div>
-                        <span id="count-primary" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #9b59b6;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Финальный</span>
-                        </div>
-                        <span id="count-final" class="legend-count">0</span>
-                    </div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div class="status-indicator" style="background: #95a5a6;"></div>
-                            <span style="font-size: 12px; color: #ecf0f1;">Доработка</span>
-                        </div>
-                        <span id="count-rework" class="legend-count">0</span>
-                    </div>
-                </div>
-            </div>
         </div>
         
         <!-- Карта -->
@@ -218,11 +157,6 @@
                 <button onclick="searchPoints()">
                     <i class="fas fa-search"></i>
                 </button>
-            </div>
-            
-            <!-- Легенда -->
-            <div class="legend">
-                <div id="legend"></div>
             </div>
             
             <!-- Кнопка центрирования -->
