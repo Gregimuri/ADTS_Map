@@ -59,7 +59,7 @@ const CONFIG = {
     },
     
     // Список листов для загрузки
-    SHEETS_TO_LOAD: ['Магнит ДП, ПЧ', 'Лента', 'Магнит-Аптеки', 'Фасоль'],
+    SHEETS_TO_LOAD: ['Магнит ДП, ПЧ', 'Лента', 'Магнит-Аптеки', 'Фасоль', 'Читай-город'],
     
     // Отладка
     DEBUG: {
@@ -127,3 +127,4 @@ window.CONFIG = CONFIG;
 window.getConfig = getConfig;
 window.getColumnNames = getColumnNames;
 window.validateConfig = validateConfig;
+
